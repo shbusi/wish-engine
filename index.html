@@ -18,6 +18,24 @@
   .brand h1 { font-size:16px; margin:0; display:flex; align-items:center; gap:8px; }
   .brand .stats { color:var(--muted); font-size:12px; margin-top:2px; display:flex; gap:10px; }
   .brand .stats b { color:var(--accent); }
+  .height { font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1; margin-top:6px; font-variant-numeric: tabular-nums; }
+  .height small { font-size:13px; color:var(--muted); font-weight:500; margin-left:6px; }
+  .goal { margin-top:6px; height:5px; background:rgba(255,255,255,.1); border-radius:999px; overflow:hidden; }
+  .goal i { display:block; height:100%; width:0; background:linear-gradient(90deg,#f0b35b,#ffd99a); border-radius:999px; transition: width .6s ease; }
+  .goaltext { color:var(--muted); font-size:11px; margin-top:4px; }
+  .tag { position:fixed; transform:translate(-50%,-100%); pointer-events:none; background:rgba(14,13,24,.78); backdrop-filter: blur(8px); border:1px solid var(--line); color:var(--fg); border-radius:999px; padding:4px 10px; font-size:13px; font-weight:600; white-space:nowrap; opacity:0; transition:opacity .3s; }
+  .tag.show { opacity:1; }
+  .tag.mine { border-color: var(--accent); color: var(--accent); }
+  .float { position:fixed; transform:translate(-50%,-50%); pointer-events:none; color:var(--accent); font-weight:800; font-size:22px; text-shadow:0 2px 12px rgba(0,0,0,.6); animation: rise 1.6s ease-out forwards; }
+  @keyframes rise { 0% { opacity:0; transform:translate(-50%,-30%) scale(.8);} 15% { opacity:1; transform:translate(-50%,-50%) scale(1.1);} 100% { opacity:0; transform:translate(-50%,-160%) scale(1);} }
+  .meta { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-top:8px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.07); border:1px solid var(--line); border-radius:999px; padding:4px 10px; }
+  .pill.free { color:#9fe0b0; border-color: rgba(159,224,176,.35); }
+  .buy { display:none; margin-top:8px; gap:8px; align-items:center; }
+  .buy.show { display:flex; }
+  .buy .btn { flex:1; }
+  .celebrate { position:fixed; inset:0; pointer-events:none; background: radial-gradient(circle at 50% 40%, rgba(240,179,91,.35), transparent 60%); opacity:0; transition: opacity .4s; }
+  .celebrate.show { opacity:1; }
   .iconbtn { background:var(--glass); backdrop-filter: blur(14px); border:1px solid var(--line); color:var(--fg); border-radius:12px; padding:9px 12px; font:inherit; font-size:14px; cursor:pointer; }
   .iconbtn:hover { border-color: rgba(255,255,255,.25); }
 
@@ -65,9 +83,12 @@
 <div class="hud top">
   <div class="brand">
     <h1>🪨 <span data-i18n="title">Wish Cairn</span></h1>
+    <div class="height"><span id="height">0.00</span> m<small id="today"></small></div>
+    <div class="goal"><i id="goalbar"></i></div>
+    <div class="goaltext" id="goaltext"></div>
     <div class="stats">
-      <span><b id="total">0</b> <span data-i18n="stones">개의 돌</span></span>
-      <span><b id="watching">1</b> <span data-i18n="watching">명이 함께</span></span>
+      <span><b id="total">0</b> <span data-i18n="stones">stones</span></span>
+      <span><b id="watching">1</b> <span data-i18n="watching">here now</span></span>
     </div>
   </div>
   <button class="iconbtn" id="feedBtn" data-i18n="recent">최근 소원</button>
@@ -79,6 +100,7 @@
 </aside>
 
 <div id="tip" role="status"></div>
+<div class="celebrate" id="celebrate"></div>
 <div class="toast" id="toast"></div>
 
 <div class="sheet">
@@ -89,6 +111,8 @@
       <button class="btn" id="btn" type="submit" data-i18n="stack">돌 올리기</button>
     </div>
     <div class="hint"><span id="hint"></span><span id="len">0/140</span></div>
+    <div class="meta"><span id="status" class="pill"></span><span id="you"></span></div>
+    <div class="buy" id="buy"><button type="button" class="btn" id="buyBtn"></button></div>
     <div class="after" id="after">
       <button type="button" class="btn ghost" id="mine" data-i18n="mine">내 돌 보기</button>
       <button type="button" class="btn ghost" id="share" data-i18n="share">링크 공유</button>
@@ -110,8 +134,8 @@ import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 
 // ================================================================== i18n
 const T = {
-  ko: { title:"소원 돌탑", loading:"돌탑을 불러오는 중…", stones:"개의 돌", watching:"명이 함께", recent:"최근 소원", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택) · 돌에 새겨져요", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명", mine:"내 돌 보기", share:"링크 공유", copied:"링크를 복사했어요", landed:(n)=>`${n}님의 돌이 올라왔어요`, landedAnon:"누군가의 돌이 올라왔어요", hidden:(n)=>`아래에 ${n.toLocaleString()}개의 돌이 더 있어요` },
-  en: { title:"Wish Cairn", loading:"Loading the cairn…", stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
+  ko: { freeReady:"오늘의 무료 돌 준비됨", nextFree:(h)=>`다음 무료 돌까지 ${h}`, creditsLeft:(n)=>`남은 돌 ${n}개`, buy:(n,p)=>`돌 ${n}개 · $${p}`, needStones:"오늘의 무료 돌을 썼어요. 더 올리려면 돌 팩이 필요해요.", bought:(n)=>`돌 ${n}개가 들어왔어요`, failed:"결제가 완료되지 않았어요", you:(n,cm)=>`내가 올린 돌 ${n}개 · ${fmtCm(cm)} 높였어요`, toGo:(n,m)=>`${m} m까지 ${n}개 남음`, reached:(m)=>`🎉 탑이 ${m} m를 넘었어요`, todayN:(n)=>`오늘 +${n}`, title:"소원 돌탑", loading:"돌탑을 불러오는 중…", stones:"개의 돌", watching:"명이 함께", recent:"최근 소원", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택) · 돌에 새겨져요", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명", mine:"내 돌 보기", share:"링크 공유", copied:"링크를 복사했어요", landed:(n)=>`${n}님의 돌이 올라왔어요`, landedAnon:"누군가의 돌이 올라왔어요", hidden:(n)=>`아래에 ${n.toLocaleString()}개의 돌이 더 있어요` },
+  en: { freeReady:"Today's free stone is ready", nextFree:(h)=>`Next free stone in ${h}`, creditsLeft:(n)=>`${n} stone${n === 1 ? "" : "s"} left`, buy:(n,p)=>`${n} stones · $${p}`, needStones:"You've used today's free stone. Get a stone pack to keep stacking.", bought:(n)=>`${n} stones added`, failed:"Payment didn't go through", you:(n,cm)=>`You've placed ${n} stone${n === 1 ? "" : "s"} · lifted the tower ${fmtCm(cm)}`, toGo:(n,m)=>`${n} stones to ${m} m`, reached:(m)=>`🎉 The tower passed ${m} m`, todayN:(n)=>`+${n} today`, title:"Wish Cairn", loading:"Loading the cairn…", stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
 };
 const L = new URLSearchParams(location.search).get("lang") === "ko" ? "ko" : "en"; // English by default; ?lang=ko for Korean
 const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
@@ -119,6 +143,8 @@ document.documentElement.lang = L;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
 const $ = (id) => document.getElementById(id);
+const fmtCm = (cm) => (cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm} cm`);
+const fmtDur = (ms) => { const mins = Math.max(1, Math.ceil(ms / 6e4)), h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
 // ================================================================== renderer
@@ -270,6 +296,9 @@ const VISIBLE = isMobile ? 16 : 20;
 const stones = [];           // oldest → newest, each { data, mesh, rx, ry, rz, label }
 const byId = new Map();
 let total = 0, lastId = 0, mine = null;
+let stoneCm = 9, today = 0, me = null, pack = null, providers = [];
+const MILESTONES = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 75, 100, 150, 200, 300, 500, 1000, 2000, 5000, 10000];
+const nextMilestone = (m) => MILESTONES.find((x) => x > m) ?? Math.ceil(m / 10000 + 1) * 10000;
 let stoneGeoBase = null;     // generated GLB geometry when available
 const seeded = (id) => { let s = (id * 9301 + 49297) % 233280; return () => (s = (s * 9301 + 49297) % 233280) / 233280; };
 
@@ -378,7 +407,29 @@ function addStone(d, animate) {
   updateHud(); addToFeed(d);
   return st;
 }
-function updateHud() { $("total").textContent = total.toLocaleString(); }
+let shownMilestone = null;
+function updateHud() {
+  $("total").textContent = total.toLocaleString();
+  const m = (total * stoneCm) / 100, goal = nextMilestone(m), prev = MILESTONES.filter((x) => x <= m).at(-1) ?? 0;
+  $("height").textContent = m.toFixed(2);
+  $("today").textContent = today ? t("todayN", today) : "";
+  $("goalbar").style.width = `${Math.min(100, ((m - prev) / (goal - prev)) * 100)}%`;
+  $("goaltext").textContent = t("toGo", Math.ceil((goal * 100 - total * stoneCm) / stoneCm), goal);
+  if (shownMilestone !== null && prev > shownMilestone) { toast(t("reached", prev)); $("celebrate").classList.add("show"); setTimeout(() => $("celebrate").classList.remove("show"), 1400); }
+  shownMilestone = prev;
+}
+function updateWallet() {
+  if (!me) return;
+  const st = $("status"), buy = $("buy"), btn = $("btn");
+  st.classList.toggle("free", me.freeNow);
+  st.textContent = me.freeNow ? `🎁 ${t("freeReady")}` : me.credits > 0 ? `🪨 ${t("creditsLeft", me.credits)}` : `⏳ ${t("nextFree", fmtDur(me.nextFreeAt - Date.now()))}`;
+  const canStack = me.freeNow || me.credits > 0;
+  buy.classList.toggle("show", !canStack && providers.length > 0);
+  if (pack) $("buyBtn").textContent = `🪙 ${t("buy", pack.stones, pack.usd)}`;
+  btn.disabled = !canStack;
+  $("you").textContent = me.placed ? t("you", me.placed, me.liftedCm) : "";
+}
+setInterval(() => { if (me && !me.freeNow && me.nextFreeAt && me.nextFreeAt <= Date.now()) { me.freeNow = true; } updateWallet(); }, 30_000);
 
 // ================================================================== animation loop
 const composer = new EffectComposer(renderer);
@@ -401,7 +452,7 @@ function tick() {
       st.vy -= 22 * dt; st.mesh.position.y += st.vy * dt;
       if (st.mesh.position.y <= st.targetY) {
         st.mesh.position.y = st.targetY;
-        if (st.vy < -3.5) { st.vy = -st.vy * 0.22; dust.burst(st.mesh.position, st.rx); st.squash = 1; }
+        if (st.vy < -3.5) { st.vy = -st.vy * 0.22; dust.burst(st.mesh.position, st.rx); st.squash = 1; if (!st.announced) { st.announced = true; tagStone(st, mine?.id === st.data.id ? 6000 : 3000, mine?.id === st.data.id); floatText(st, `+${stoneCm} cm`); } }
         else { st.falling = false; st.vy = 0; st.squash = Math.max(st.squash ?? 0, 0.5); }
       }
     }
@@ -419,7 +470,33 @@ function tick() {
   controls.update();
   composer.render();
   if (tipFor) placeTip();
+  placeTags();
   requestAnimationFrame(tick);
+}
+
+// ================================================================== name tags: only for the stone that just landed and for my stone
+const tags = new Map(); // stoneId → { el, until, st }
+function tagStone(st, ms, mineTag = false) {
+  if (!st?.data.name) return;
+  let tg = tags.get(st.data.id);
+  if (!tg) { const el = document.createElement("div"); el.className = "tag"; document.body.appendChild(el); tg = { el, st }; tags.set(st.data.id, tg); }
+  tg.el.textContent = st.data.name; tg.el.classList.toggle("mine", mineTag); tg.until = performance.now() + ms;
+  requestAnimationFrame(() => tg.el.classList.add("show"));
+}
+function placeTags() {
+  const now = performance.now();
+  for (const [id, tg] of tags) {
+    if (!byId.has(id) || now > tg.until) { tg.el.classList.remove("show"); if (now > tg.until + 400) { tg.el.remove(); tags.delete(id); } continue; }
+    tmpV.copy(tg.st.mesh.position).y += tg.st.ry + 0.15; tmpV.project(camera);
+    tg.el.style.left = `${(tmpV.x + 1) / 2 * innerWidth}px`; tg.el.style.top = `${(1 - tmpV.y) / 2 * innerHeight}px`;
+    tg.el.style.display = tmpV.z < 1 ? "" : "none";
+  }
+}
+function floatText(st, text) {
+  const el = document.createElement("div"); el.className = "float"; el.textContent = text; document.body.appendChild(el);
+  tmpV.copy(st.mesh.position).y += st.ry; tmpV.project(camera);
+  el.style.left = `${(tmpV.x + 1) / 2 * innerWidth + 60}px`; el.style.top = `${(1 - tmpV.y) / 2 * innerHeight}px`;
+  setTimeout(() => el.remove(), 1700);
 }
 
 // ================================================================== interaction: tap a stone to read its wish
@@ -435,7 +512,7 @@ canvas.addEventListener("pointerup", (e) => {
 function showTip(st) { tipFor = st; $("tip").innerHTML = `${esc(st.data.wish)}<small>— ${esc(st.data.name || t("anon"))}</small>`; $("tip").classList.add("show"); placeTip(); }
 function hideTip() { tipFor = null; $("tip").classList.remove("show"); }
 function placeTip() { tmpV.copy(tipFor.mesh.position).y += tipFor.ry; tmpV.project(camera); $("tip").style.left = `${(tmpV.x + 1) / 2 * innerWidth}px`; $("tip").style.top = `${(1 - tmpV.y) / 2 * innerHeight}px`; }
-function focusOn(st) { if (!st) return; focusStone = st; focusT = 2.2; st.glow = 2.5; wake(); setTimeout(() => { if (focusStone === st) focusStone = null; }, 6000); showTip(st); }
+function focusOn(st) { if (!st) return; focusStone = st; focusT = 2.2; st.glow = 2.5; wake(); setTimeout(() => { if (focusStone === st) focusStone = null; }, 6000); showTip(st); tagStone(st, 6000, mine?.id === st.data.id); }
 
 // ================================================================== feed
 const feedList = $("feedList");
@@ -449,8 +526,14 @@ $("feedClose").addEventListener("click", () => $("feed").classList.remove("open"
 let toastT; function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
 
 // ================================================================== data + live
+async function loadMe() {
+  const r = await fetch("/api/me").then((r) => r.json());
+  me = r.wallet; pack = r.pack; providers = r.providers; stoneCm = r.stoneCm; today = r.today;
+  updateWallet();
+}
 async function load() {
   const r = await fetch(`/api/stones?n=${VISIBLE}`).then((r) => r.json());
+  stoneCm = r.stoneCm; today = r.today;
   setStones(r.stones, r.total);
   feedList.innerHTML = ""; [...r.stones].reverse().forEach((d) => addToFeed(d, false));
 }
@@ -458,7 +541,7 @@ function live() {
   const es = new EventSource("/api/events");
   es.onmessage = (m) => {
     const e = JSON.parse(m.data);
-    if (e.type === "stone") { if (!byId.has(e.stone.id)) { addStone(e.stone, true); total = e.total; updateHud(); toast(e.stone.name ? t("landed", e.stone.name) : t("landedAnon")); } else { total = e.total; updateHud(); } }
+    if (e.type === "stone") { today = e.today; if (!byId.has(e.stone.id)) { addStone(e.stone, true); total = e.total; updateHud(); toast(e.stone.name ? t("landed", e.stone.name) : t("landedAnon")); } else { total = e.total; updateHud(); } }
     if (e.type === "presence" || e.type === "hello") $("watching").textContent = e.watching;
     if (e.type === "hello" && e.total !== total) load();
   };
@@ -475,16 +558,28 @@ form.addEventListener("submit", async (ev) => {
   btn.disabled = true; btn.textContent = t("stacking"); hint.textContent = "";
   try {
     const r = await fetch("/api/stones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wish, name }) });
-    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    const j = await r.json();
+    if (j.wallet) { me = j.wallet; if (j.pack) pack = j.pack; if (j.providers) providers = j.providers; updateWallet(); }
+    if (!r.ok) throw new Error(j.error);
+    today = j.today;
     // The SSE echo can land before this response; either way we end up with the same stone.
+    mine = j.stone;
     const st = addStone(j.stone, true) ?? byId.get(j.stone.id); total = j.total; updateHud();
-    mine = j.stone; st.glow = 3; focusStone = null; wake();
+    st.glow = 3; focusStone = null; wake();
     wishEl.value = ""; $("len").textContent = "0/140"; hint.textContent = t("done"); $("after").classList.add("show");
     history.replaceState(null, "", `?s=${j.stone.id}`);
     try { localStorage.setItem("cairn_name", name); localStorage.setItem("cairn_mine", String(j.stone.id)); } catch {}
     wishEl.blur();
-  } catch (e) { console.error("stack failed", e); hint.textContent = e.message === "rate_limited" ? t("rate") : e.message === "too_short" ? t("short") : t("err"); }
-  finally { btn.disabled = false; btn.textContent = t("stack"); }
+  } catch (e) { console.error("stack failed", e); hint.textContent = e.message === "rate_limited" ? t("rate") : e.message === "too_short" ? t("short") : e.message === "need_credits" ? t("needStones") : t("err"); }
+  finally { btn.disabled = false; btn.textContent = t("stack"); updateWallet(); }
+});
+$("buyBtn").addEventListener("click", async () => {
+  $("buyBtn").disabled = true;
+  try {
+    const r = await fetch("/api/buy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: providers[0] }) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    location.href = j.redirectUrl;
+  } catch { toast(t("err")); $("buyBtn").disabled = false; }
 });
 $("mine").addEventListener("click", () => { const st = mine && byId.get(mine.id); if (st) focusOn(st); else toast(t("hidden", total - stones.length)); });
 $("share").addEventListener("click", async () => {
@@ -519,9 +614,12 @@ async function loadAssets() {
 }
 
 // ================================================================== go
-await load();
+await Promise.all([load(), loadMe()]);
 live();
 $("loading").classList.add("gone");
+{ const qs = new URLSearchParams(location.search);
+  if (qs.get("bought")) { toast(t("bought", pack?.stones ?? "")); history.replaceState(null, "", "/"); }
+  if (qs.get("failed")) { toast(t("failed")); history.replaceState(null, "", "/"); } }
 tick();
 loadAssets();
 { // deep link ?s=<id>: find that stone

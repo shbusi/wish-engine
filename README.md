@@ -28,6 +28,25 @@ npm test
 - **Older stones** (beyond the newest 20) become an instanced mound that grows up to meet the tower, so the tower never sinks as the window moves.
 - **Post**: ACES tone mapping, bloom, vignette. Mobile gets fewer particles, smaller shadow maps, lighter bloom.
 
+## Height, and why you keep stacking
+
+- The HUD leads with the **tower height** (one stone = `STONE_CM`, default 9 cm), a progress bar to the next
+  milestone (1 m, 2 m, 3 m, 5 m, 8 m, 10 m …) and "N stones to X m". Crossing a milestone flashes the sky.
+- Every landing floats **+9 cm** off the stone. After you stack: "You've placed N stones · lifted the tower X".
+- Name tags appear only for the stone that **just landed** (3 s) and for **your own** stone (6 s, gold).
+
+## Free stone, then paid
+
+Every visitor gets an anonymous wallet (httpOnly cookie, no account).
+
+- **One free stone every 24 h** (`FREE_EVERY_HOURS`). The form shows "Today's free stone is ready" or a countdown.
+- After that a stone costs **one credit**. Credits come in packs: `PACK_STONES` (10) for `PACK_PRICE_USD` (0.99).
+- Providers: **PayPal** (Orders v2, capture on return) and a dev-only **mock** page. `PAYMENT_PROVIDERS=paypal`
+  plus `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENV=live|sandbox`, `APP_URL=https://…`.
+  The mock provider is disabled in production unless `ALLOW_MOCK_PAYMENTS=1`.
+- A $0.99 pack is the smallest amount that survives PayPal's fixed fee; a single ₩100 stone would not.
+  Crypto (USDC on an L2) can be added as a third provider with the same `checkout → settleOrder` shape.
+
 ## Usability
 
 - Tap any stone to read its wish. **Recent wishes** drawer; tapping an entry flies the camera to that stone.
@@ -57,7 +76,7 @@ Keep sacred-site imagery stylized; the prompts avoid people, text and religious 
 ## Files
 
 ```
-server.js                 SQLite stones · GET/POST /api/stones · GET /api/events (SSE) · static /vendor/three and /assets
+server.js                 SQLite stones + wallets + orders · /api/me · GET/POST /api/stones · /api/buy · PayPal return · /pay/mock · /api/events (SSE) · static
 index.html                the 3D scene, UI, live updates (one file, ES modules via import map)
 tools/generate-assets.mjs generative asset pipeline → assets/manifest.json
 test.js                   validation, ordering, HTTP + SSE round-trip
