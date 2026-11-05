@@ -1,5 +1,23 @@
 import { prisma } from "./db";
 import type { PaymentOutcome } from "./payments/types";
+import { rollRarity, variantId } from "./relics";
+import type { Prisma } from "@prisma/client";
+
+/**
+ * Roll rarity for a wish that just became OFFERED and mint a Relic for the
+ * wisher's wallet if it is anything above COMMON. Runs inside the caller's transaction.
+ */
+export async function rollAndMintRelic(tx: Prisma.TransactionClient, wish: { id: string; channelId: string; walletId: string | null; rarity: string }) {
+  if (wish.rarity !== "COMMON") return wish.rarity; // already rolled
+  const rarity = rollRarity();
+  await tx.wish.update({ where: { id: wish.id }, data: { rarity } });
+  if (rarity !== "COMMON" && wish.walletId) {
+    await tx.relic.create({
+      data: { wishId: wish.id, channelId: wish.channelId, rarity, variantId: variantId(wish.channelId, rarity), finderWalletId: wish.walletId, ownerWalletId: wish.walletId },
+    });
+  }
+  return rarity;
+}
 
 /**
  * Apply a payment outcome to whatever the payment is for — a wish or a
@@ -45,6 +63,7 @@ export async function settlePayment(opts: {
         where: { id: fresh.wish.id },
         data: { status: wishStatus, offeredAt: becomingOffered ? new Date() : fresh.wish.offeredAt },
       });
+      if (becomingOffered) await rollAndMintRelic(tx, fresh.wish);
       if (becomingOffered || leavingOffered) {
         await tx.channel.update({
           where: { id: fresh.wish.channelId },
@@ -107,6 +126,7 @@ export const PUBLIC_WISH_SELECT = {
   amountKrw: true,
   offeredAt: true,
   referrals: true,
+  rarity: true,
 } as const;
 
 export async function listOfferedWishes(opts: { channelId?: string; cursor?: string; take?: number }) {

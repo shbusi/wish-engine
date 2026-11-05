@@ -12,7 +12,10 @@ export interface PublicWish {
   locale: string;
   amountKrw: number;
   offeredAt: string | Date | null;
+  rarity?: string;
 }
+
+const RARE_BADGE: Record<string, string> = { UNCOMMON: "text-emerald-300", RARE: "text-amber-300", LEGENDARY: "text-purple-300" };
 
 export function WishWall({
   initial,
@@ -54,7 +57,10 @@ export function WishWall({
           const c = CHANNEL_MAP[w.channelId];
           return (
             <li key={w.id} className="card p-3">
-              <p className="whitespace-pre-wrap break-words">{w.text}</p>
+              <p className="whitespace-pre-wrap break-words">
+                {w.rarity && RARE_BADGE[w.rarity] ? <span className={`mr-1 ${RARE_BADGE[w.rarity]}`}>✦</span> : null}
+                {w.text}
+              </p>
               <div className="mt-2 flex items-center justify-between text-xs text-[var(--muted)]">
                 <span>
                   {showChannel && c ? <a href={`/c/${c.id}`} className="mr-2">{c.emoji} {c.name[locale]}</a> : null}

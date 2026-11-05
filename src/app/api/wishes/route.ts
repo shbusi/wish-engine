@@ -8,7 +8,8 @@ import { sanitizeWish, violates, WISH_MAX, WISH_MIN, NAME_MAX } from "@/lib/mode
 import { rateLimit, clientKey } from "@/lib/ratelimit";
 import { enabledProviders, getProvider } from "@/lib/payments";
 import { listOfferedWishes, settlePayment } from "@/lib/wishes";
-import { currentWallet, spendOneCredit, CREDIT_WISH_KRW } from "@/lib/credits";
+import { ensureWallet, spendOneCredit, CREDIT_WISH_KRW } from "@/lib/credits";
+import { rollAndMintRelic } from "@/lib/wishes";
 import { cookies } from "next/headers";
 import { VIA_COOKIE } from "@/middleware";
 
@@ -64,10 +65,11 @@ export async function POST(req: Request) {
   const viaRaw = (await cookies()).get(VIA_COOKIE)?.value;
   const viaWishId = viaRaw && (await prisma.wish.findUnique({ where: { id: viaRaw }, select: { id: true } })) ? viaRaw : null;
 
+  // Every wisher gets a wallet so they can own whatever drops with their wish.
+  const wallet = await ensureWallet();
+
   // --- Pay with a pre-purchased credit: no checkout, the wish is offered immediately.
   if (b.provider === "credits") {
-    const wallet = await currentWallet();
-    if (!wallet) return NextResponse.json({ error: "no_wallet" }, { status: 402 });
     const result = await prisma.$transaction(async (tx) => {
       const wish = await tx.wish.create({
         data: {
@@ -85,16 +87,17 @@ export async function POST(req: Request) {
       const ok = await spendOneCredit(tx, wallet.id, wish.id);
       if (!ok) throw new Error("insufficient_credits");
       await tx.wish.update({ where: { id: wish.id }, data: { status: "OFFERED", offeredAt: new Date() } });
+      const rarity = await rollAndMintRelic(tx, { ...wish, walletId: wallet.id });
       await tx.payment.create({
         data: { wishId: wish.id, provider: "credits", providerRef: wallet.id, currency: "CREDIT", amount: "1", amountKrw: CREDIT_WISH_KRW, status: "PAID" },
       });
       await tx.channel.update({ where: { id: channel.id }, data: { wishCount: { increment: 1 } } });
       if (viaWishId) await tx.wish.update({ where: { id: viaWishId }, data: { referrals: { increment: 1 } } });
-      return wish;
+      return { ...wish, rarity };
     }).catch((e: Error) => (e.message === "insufficient_credits" ? null : Promise.reject(e)));
     if (!result) return NextResponse.json({ error: "insufficient_credits" }, { status: 402 });
     const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-    return NextResponse.json({ wishId: result.id, redirectUrl: `${base}/w/${result.id}` });
+    return NextResponse.json({ wishId: result.id, rarity: result.rarity, redirectUrl: `${base}/w/${result.id}` });
   }
 
   if (!isValidOffering(b.amountKrw)) return NextResponse.json({ error: "bad_amount" }, { status: 400 });
@@ -113,6 +116,7 @@ export async function POST(req: Request) {
       amountKrw: b.amountKrw,
       status: "PENDING",
       viaWishId,
+      walletId: wallet.id,
       payment: {
         create: { provider: provider.id, currency: "KRW", amount: String(b.amountKrw), amountKrw: b.amountKrw },
       },

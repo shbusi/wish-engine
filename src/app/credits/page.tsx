@@ -5,6 +5,8 @@ import { enabledProviders } from "@/lib/payments";
 import { CREDIT_PACKS, currentWallet } from "@/lib/credits";
 import { formatKrw } from "@/lib/money";
 import { BuyPack, ClaimWallet, RecoveryCode } from "@/components/CreditsPanel";
+import { getChannel } from "@/lib/channels";
+import { relicName, RARITY_STYLE, type Rarity } from "@/lib/relics";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +15,12 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
   const locale = await currentLocale();
   const d = t(locale);
   const wallet = await currentWallet();
-  const [txns, purchase] = await Promise.all([
+  const [txns, purchase, relics] = await Promise.all([
     wallet ? prisma.creditTxn.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 20 }) : [],
     purchaseId ? prisma.creditPurchase.findUnique({ where: { id: purchaseId } }) : null,
+    wallet
+      ? prisma.relic.findMany({ where: { ownerWalletId: wallet.id }, orderBy: { createdAt: "desc" }, include: { auctions: { where: { status: "OPEN" }, select: { id: true } } } })
+      : [],
   ]);
   const pack = CREDIT_PACKS[0];
 
@@ -56,6 +61,26 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
         <h2 className="font-semibold">{d.credits.claim}</h2>
         <ClaimWallet d={d} />
       </section>
+
+      {relics.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">🏺 {d.relic.myRelics}</h2>
+          <ul className="card divide-y divide-white/10">
+            {relics.map((r) => {
+              const c = getChannel(r.channelId)!;
+              const rs = RARITY_STYLE[r.rarity as Rarity];
+              return (
+                <li key={r.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                  <a href={`/w/${r.wishId}`}>
+                    {c.emoji} <span style={{ color: rs.color }}>✦ {rs.label[locale]}</span> · {relicName(r.channelId, r.rarity as Rarity, locale)}
+                  </a>
+                  {r.auctions[0] ? <a className="text-[var(--accent)]" href={`/auctions/${r.auctions[0].id}`}>{d.relic.live} →</a> : <a className="text-[var(--muted)]" href={`/w/${r.wishId}`}>{d.relic.listAuction} →</a>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {txns.length > 0 && (
         <section className="space-y-2">

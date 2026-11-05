@@ -30,6 +30,19 @@ recovery code (`WE-XXXXXX-…`) to restore it on another device. A wish paid wit
 and is offered instantly. This is the economically sane path: one PayPal/crypto fee per 10 wishes
 instead of per wish.
 
+**Share loop:** every offered wish has a PNG card (`/w/:id/card?f=story|og|square`) with the wisher's
+name inscribed on their ritual object, Open Graph metadata for link previews, and a share bar with
+native share (PNG attached), X, copy link and downloads. Shared links carry `?s=1`; a wish made after
+following one is attributed back ("N people wished after seeing this").
+
+**Rare drops & auctions:** when a wish is offered a rarity is rolled (Common 94% · Uncommon 5% ·
+Rare 0.9% · Legendary 0.1%). Anything above Common mints a **Relic**, a culturally specific variant of
+the ritual object (옥돌 Jade Stone, 金箔の絵馬 Gilded Ema, Ancient Roman Coin, Dragon Lantern …) owned
+by the wisher's wallet. Owners can put relics up for a 24h/72h **credit auction**: bids lock credits,
+outbid credits refund instantly, bids in the last five minutes extend the auction, and on settlement
+the relic transfers, the seller receives 80% of the winning bid and 20% is the platform fee. Rare
+objects glow in the channel scene and the share card gets a rarity frame.
+
 Each channel is fully localized in **ko / en / ja / zh** and has a data-driven SVG scene that grows
 with the number of offered wishes (`src/components/RitualScene.tsx`). Adding a channel is one entry
 in `src/lib/channels.ts` plus a `case` in the scene renderer.
@@ -88,6 +101,12 @@ only on the first transition, refunds reverse the counter. Webhook event ids are
 | `GET` | `/api/paypal/cancel?p=` | Buyer cancelled |
 | `POST` | `/api/credits/checkout` | Buy a credit pack → `{ redirectUrl }` (mints wallet cookie) |
 | `POST` | `/api/credits/claim` | Restore a wallet from its recovery code |
+| `GET` | `/w/:id/card?f=story\|og\|square` | PNG share card (1080×1920 / 1200×630 / 1080×1080) |
+| `POST` | `/api/wishes/:id/share` | Count a share click |
+| `POST` | `/api/auctions` | List a relic you own `{ relicId, hours: 24\|72, minBidCredits? }` |
+| `POST` | `/api/auctions/:id/bid` | Bid credits `{ credits }` (402 when short) |
+| `POST` | `/api/auctions/:id/cancel` | Cancel an unbid auction (seller) |
+| `GET` | `/api/auctions/settle` | Cron target; settles due auctions (also lazy on page views). `Authorization: Bearer $CRON_SECRET` when set |
 | `POST` | `/api/mock/confirm` | Dev only: simulate outcome |
 | `GET` | `/api/locale?set=ko&back=/` | Set language cookie |
 
@@ -115,6 +134,12 @@ handles rejected, 10 requests per minute per IP (in-memory; use Redis for multi-
 3. Switch Prisma to Postgres (`provider = "postgresql"`), run `prisma migrate deploy`.
 4. Set `NEXT_PUBLIC_APP_URL` to the public origin (used for return URLs and share links).
 5. Replace the static FX rates in `.env` with a live feed if you price in USD at scale.
+6. Point a cron at `GET /api/auctions/settle` every few minutes (set `CRON_SECRET`). Pages also settle
+   lazily, so this is a safety net, not a requirement.
+7. Rarity odds are env-tunable (`RARITY_LEGENDARY_BP`, `RARITY_RARE_BP`, `RARITY_UNCOMMON_BP`, basis
+   points of 10,000) for events. `RARITY_FORCE=RARE` works outside production (or on staging with `ALLOW_MOCK_PAYMENTS=1`) for testing.
+8. Share cards fetch per-text font subsets from Google Fonts at render time (cached in memory); allow
+   `fonts.googleapis.com` and `fonts.gstatic.com` egress.
 
 ### ⚠️ The ₩100 economics
 
@@ -132,7 +157,7 @@ the "I just want to toss one coin" moment.
 ## Project layout
 
 ```
-prisma/schema.prisma       Channel · Wish · Payment · WebhookEvent · CreditWallet · CreditPurchase · CreditTxn
+prisma/schema.prisma       Channel · Wish · Payment · WebhookEvent · CreditWallet · CreditPurchase · CreditTxn · Relic · Auction · Bid
 prisma/seed.ts             channel rows (+ optional sample wishes)
 src/lib/channels.ts        the 12 rituals, localized
 src/lib/i18n.ts            UI strings ko/en/ja/zh + Accept-Language negotiation
@@ -140,7 +165,12 @@ src/lib/money.ts           KRW base, FX, presets, validation
 src/lib/payments/          provider interface + mock / paypal / crypto adapters
 src/lib/wishes.ts          settlement (idempotent, wishes + credit purchases), wall queries
 src/lib/credits.ts         credit packs, anonymous wallet, atomic spend
-src/app/                   pages: / · /c/[slug] · /w/[id] · /credits · /about · /pay/mock/[id]
+src/lib/relics.ts          rarity odds + per-channel relic variants (12 × 3 tiers × 4 locales)
+src/lib/auctions.ts        list / bid / outbid refund / anti-snipe / settle with fee
+src/lib/card.tsx           Satori share card with the name inscribed on the ritual object
+src/lib/fonts.ts           per-text Google Fonts subsets by detected script
+src/middleware.ts          ?s=1 share links → attribution cookie
+src/app/                   pages: / · /c/[slug] · /w/[id] · /credits · /auctions · /auctions/[id] · /about
 src/app/api/               routes listed above
 src/components/            RitualScene (SVG), WishForm, WishWall, ChannelCard
 tests/                     node:test suites

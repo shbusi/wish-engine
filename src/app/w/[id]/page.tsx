@@ -6,6 +6,9 @@ import { currentLocale } from "@/lib/locale-server";
 import { formatKrw } from "@/lib/money";
 import { RitualScene } from "@/components/RitualScene";
 import { ShareBar } from "@/components/ShareBar";
+import { RelicPanel } from "@/components/RelicPanel";
+import { currentWallet } from "@/lib/credits";
+import { relicName, RARITY_STYLE, MIN_BID_BY_RARITY, type Rarity } from "@/lib/relics";
 import { listOfferedWishes } from "@/lib/wishes";
 import type { Metadata } from "next";
 
@@ -32,8 +35,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function WishPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const wish = await prisma.wish.findUnique({ where: { id }, include: { payment: true, channel: true } });
+  const wish = await prisma.wish.findUnique({
+    where: { id },
+    include: { payment: true, channel: true, relic: { include: { auctions: { where: { status: "OPEN" }, select: { id: true } } } } },
+  });
   if (!wish) notFound();
+  const wallet = await currentWallet();
   const c = getChannel(wish.channelId);
   if (!c) notFound();
   const locale = await currentLocale();
@@ -48,7 +55,7 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 space-y-6">
       <div className="card overflow-hidden">
-        <RitualScene visual={c.visual} count={wish.channel.wishCount} hue={c.hue} labels={labels} />
+        <RitualScene visual={c.visual} count={wish.channel.wishCount} hue={c.hue} labels={labels} rarities={[wish.rarity, ...recent.items.filter((w) => w.id !== wish.id).map((w) => w.rarity)]} />
       </div>
       <div className="card p-6 space-y-3">
         <div className="flex items-center justify-between">
@@ -73,6 +80,19 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
           <a className="btn btn-ghost" href={`/c/${c.id}`}>{d.backToChannel}</a>
         </div>
       </div>
+      {wish.relic && (
+        <RelicPanel
+          relicId={wish.relic.id}
+          rarityLabel={RARITY_STYLE[wish.relic.rarity as Rarity].label[locale]}
+          rarityColor={RARITY_STYLE[wish.relic.rarity as Rarity].color}
+          relicName={relicName(wish.channelId, wish.relic.rarity as Rarity, locale)}
+          isOwner={!!wallet && wallet.id === wish.relic.ownerWalletId}
+          openAuctionId={wish.relic.auctions[0]?.id ?? null}
+          d={d}
+          minBid={MIN_BID_BY_RARITY[wish.relic.rarity as Exclude<Rarity, "COMMON">] ?? 1}
+          emoji={c.emoji}
+        />
+      )}
       {offered && wish.isPublic && (
         <div className="card p-6 space-y-3">
           <h2 className="font-semibold">{d.share}</h2>

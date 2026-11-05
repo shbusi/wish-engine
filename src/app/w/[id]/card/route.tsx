@@ -4,6 +4,7 @@ import { getChannel } from "@/lib/channels";
 import { isLocale } from "@/lib/i18n";
 import { loadFont, fontFamilyFor, detectFontLocale } from "@/lib/fonts";
 import { WishCard, CARD_SIZES, CARD_COPY, type CardFormat } from "@/lib/card";
+import { relicName, RARITY_STYLE, type Rarity } from "@/lib/relics";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const locale = isLocale(wish.locale) ? wish.locale : "en";
   const base = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
   const copy = CARD_COPY[locale];
-  const allText = [wish.text, wish.author ?? "", channel.name[locale], channel.unit[locale], base, copy.cta, copy.by, copy.joined(wish.referrals)].join("");
+  const rarity = wish.rarity as Rarity;
+  const rName = relicName(wish.channelId, rarity, locale);
+  const allText = [wish.text, wish.author ?? "", channel.name[locale], channel.unit[locale], base, copy.cta, copy.by, copy.joined(wish.referrals), RARITY_STYLE[rarity].label[locale], rName, " - "].join("");
   const fontLocale = detectFontLocale(allText, locale);
   const fontFamily = fontFamilyFor(fontLocale);
   const [regular, bold] = await Promise.all([loadFont(fontLocale, 400, allText), loadFont(fontLocale, 700, allText)]);
@@ -43,6 +46,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         url={`${base}/w/${wish.id}`}
         format={format}
         fontFamily={fontFamily}
+        rarity={rarity}
+        relicName={rName}
       />
     ),
     {

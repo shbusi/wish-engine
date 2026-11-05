@@ -39,6 +39,9 @@ model Wish {
   shareCount  Int      @default(0)    // share button clicks on this wish
   referrals   Int      @default(0)    // wishes offered by people who arrived via this wish's shared link
   viaWishId   String?                 // the wish whose shared link brought this wisher here
+  // --- rarity
+  rarity      String   @default("COMMON") // COMMON | UNCOMMON | RARE | LEGENDARY (rolled when offered)
+  relic       Relic?
 
   @@index([channelId, status, offeredAt])
 }
@@ -81,6 +84,8 @@ model CreditWallet {
   purchases   CreditPurchase[]
   txns        CreditTxn[]
   wishes      Wish[]
+  relics      Relic[]  @relation("owner")
+  bids        Bid[]
 }
 
 model CreditPurchase {
@@ -108,4 +113,56 @@ model CreditTxn {
   createdAt   DateTime @default(now())
 
   @@index([walletId, createdAt])
+}
+
+/// A rare object that dropped with a wish: a jade stone, a gilded ema, an ancient coin.
+model Relic {
+  id             String   @id @default(cuid())
+  wishId         String   @unique
+  wish           Wish     @relation(fields: [wishId], references: [id])
+  channelId      String
+  rarity         String   // UNCOMMON | RARE | LEGENDARY
+  variantId      String   // e.g. "stone-cairn:RARE"
+  finderWalletId String
+  ownerWalletId  String
+  owner          CreditWallet @relation("owner", fields: [ownerWalletId], references: [id])
+  createdAt      DateTime @default(now())
+  auctions       Auction[]
+
+  @@index([ownerWalletId])
+  @@index([rarity, createdAt])
+}
+
+/// Credit-denominated auction of a relic. Bids lock credits; outbid credits are refunded.
+model Auction {
+  id                 String   @id @default(cuid())
+  relicId            String
+  relic              Relic    @relation(fields: [relicId], references: [id])
+  sellerWalletId     String
+  minBidCredits      Int
+  startsAt           DateTime @default(now())
+  endsAt             DateTime
+  status             String   @default("OPEN") // OPEN | SETTLED | ENDED (no bids) | CANCELLED
+  winnerWalletId     String?
+  winningBidCredits  Int?
+  feeCredits         Int?
+  createdAt          DateTime @default(now())
+  bids               Bid[]
+
+  @@index([status, endsAt])
+  @@index([relicId])
+}
+
+model Bid {
+  id         String   @id @default(cuid())
+  auctionId  String
+  auction    Auction  @relation(fields: [auctionId], references: [id])
+  walletId   String
+  wallet     CreditWallet @relation(fields: [walletId], references: [id])
+  credits    Int
+  status     String   @default("ACTIVE") // ACTIVE | OUTBID | WON | REFUNDED
+  createdAt  DateTime @default(now())
+
+  @@index([auctionId, status, credits])
+  @@index([walletId])
 }

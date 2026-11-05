@@ -6,6 +6,7 @@
  * a stone, a plaque, a coin, a lantern, a ribbon...
  */
 import type { ChannelDef, ChannelVisual, Locale } from "./channels";
+import { RARITY_STYLE, type Rarity } from "./relics";
 
 export type CardFormat = "story" | "og" | "square";
 export const CARD_SIZES: Record<CardFormat, { width: number; height: number }> = {
@@ -31,6 +32,8 @@ export interface CardInput {
   url: string;
   format: CardFormat;
   fontFamily: string;
+  rarity?: Rarity;
+  relicName?: string;
 }
 
 /** Satori chokes on `undefined` style values; strip them. */
@@ -147,14 +150,16 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
   }
 }
 
-export function WishCard({ channel, locale, text, author, referrals, count, url, format, fontFamily }: CardInput) {
+export function WishCard({ channel, locale, text, author, referrals, count, url, format, fontFamily, rarity = "COMMON", relicName }: CardInput) {
+  const rs = RARITY_STYLE[rarity];
+  const isRare = rarity !== "COMMON";
   const { width, height } = CARD_SIZES[format];
   const copy = CARD_COPY[locale];
   const vertical = format === "story";
   const pad = width * 0.07;
-  const tokenSize = vertical ? width * 0.5 : height * 0.55;
+  const tokenSize = vertical ? width * 0.5 : Math.min(height * 0.55, width * 0.3);
   const name = author ?? "";
-  const textSize = Math.min(vertical ? width * 0.065 : height * 0.075, 72) * (text.length > 90 ? 0.75 : 1);
+  const textSize = Math.min(vertical ? width * 0.065 : height * 0.075, format === "square" ? 56 : 72) * (text.length > 90 ? 0.75 : 1);
   const host = url.replace(/^https?:\/\//, "").split("/")[0];
 
   return (
@@ -169,9 +174,18 @@ export function WishCard({ channel, locale, text, author, referrals, count, url,
         padding: pad,
         fontFamily: `"${fontFamily}", "Noto Sans", sans-serif`,
         color: "#f3efe6",
-        background: `radial-gradient(circle at ${vertical ? "50% 25%" : "25% 50%"}, hsl(${channel.hue} 45% 22%), #0b0a12 60%)`,
+        background: isRare
+          ? `radial-gradient(circle at ${vertical ? "50% 25%" : "25% 50%"}, ${rs.glow}, hsl(${channel.hue} 45% 14%) 45%, #0b0a12 75%)`
+          : `radial-gradient(circle at ${vertical ? "50% 25%" : "25% 50%"}, hsl(${channel.hue} 45% 22%), #0b0a12 60%)`,
+        border: isRare ? `${vertical ? 14 : 10}px solid ${rs.color}` : "0px solid transparent",
       }}
     >
+      {isRare && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "absolute", top: pad * 0.5, left: pad * 0.5, padding: "8px 18px", borderRadius: 999, background: rs.color, color: "#141018", fontWeight: 700, fontSize: vertical ? 30 : 22 }}>
+          <div style={{ width: vertical ? 16 : 12, height: vertical ? 16 : 12, background: "#141018", transform: "rotate(45deg)" }} />
+          <div style={{ display: "flex" }}>{rs.label[locale]}{relicName ? ` - ${relicName}` : ""}</div>
+        </div>
+      )}
       {/* Token */}
       <div style={S({ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, flexShrink: 0, marginRight: vertical ? 0 : pad })}>
         <Token visual={channel.visual} name={name} hue={channel.hue} size={tokenSize} />

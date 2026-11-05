@@ -46,6 +46,20 @@ export async function createWallet() {
 }
 
 /**
+ * Wallet for the current visitor, minting one (and its cookie) if absent.
+ * Only valid where cookies can be written: route handlers and server actions.
+ */
+export async function ensureWallet() {
+  const store = await cookies();
+  const token = store.get(WALLET_COOKIE)?.value;
+  const existing = token ? await prisma.creditWallet.findUnique({ where: { token } }) : null;
+  if (existing) return existing;
+  const w = await createWallet();
+  store.set(WALLET_COOKIE, w.token, WALLET_COOKIE_OPTS);
+  return w;
+}
+
+/**
  * Spend one credit atomically. Returns false when the wallet has none.
  * The caller creates the wish inside the same transaction.
  */

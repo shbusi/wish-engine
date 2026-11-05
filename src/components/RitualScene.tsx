@@ -21,11 +21,14 @@ export function RitualScene({
   count,
   hue,
   labels = [],
+  rarities = [],
 }: {
   visual: ChannelVisual;
   count: number;
   hue: number;
   labels?: (string | null)[];
+  /** Aligned with labels: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY". Rare objects glow. */
+  rarities?: (string | null)[];
 }) {
   const n = Math.max(1, Math.min(count, 60));
   const r = rnd(n * 7919 + 17);
@@ -35,13 +38,20 @@ export function RitualScene({
   const L = labels.slice(0, 24);
   const short = (v: string | null | undefined, max = 8) => (v ? (v.length > max ? v.slice(0, max - 1) + "…" : v) : null);
   /** Text inscribed on an object. `i` indexes newest-first. */
+  const RARE_COLOR: Record<string, string> = { UNCOMMON: "#5ad18f", RARE: "#f0b35b", LEGENDARY: "#c084fc" };
   const Inscribe = ({ i, x, y, size = 9, fill = "#2a2118", max = 8, rotate = 0 }: { i: number; x: number; y: number; size?: number; fill?: string; max?: number; rotate?: number }) => {
+    const rare = RARE_COLOR[rarities[i] ?? ""];
     const v = short(L[i], max);
-    if (!v) return null;
+    if (!v && !rare) return null;
     return (
-      <text x={x} y={y} fontSize={size} fontWeight={700} fill={fill} textAnchor="middle" dominantBaseline="middle" transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined} style={{ fontFamily: "inherit", pointerEvents: "none" }}>
-        {v}
-      </text>
+      <g>
+        {rare && <circle cx={x} cy={y} r={size * 2.2} fill={rare} opacity={0.35} className="anim-flicker" />}
+        {v && (
+          <text x={x} y={y} fontSize={size} fontWeight={700} fill={rare ?? fill} textAnchor="middle" dominantBaseline="middle" transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined} style={{ fontFamily: "inherit", pointerEvents: "none" }}>
+            {rare ? "✦ " : ""}{v}
+          </text>
+        )}
+      </g>
     );
   };
 
