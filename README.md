@@ -23,9 +23,9 @@ npm test
 - **Moonlight** (key, soft shadows), a **lantern** by the tower (warm point light, flickers), hemisphere fill, exponential fog.
 - **Stones**: procedural river stones (icosahedron + 3D noise, flattened top/bottom), PBR material with a procedural
   albedo/bump texture; deterministic shape, color, offset and tilt per stone id so everyone sees the same tower.
-- **Names** engraved as a small plane hugging the side of the stone that faces you (ellipse-radius placement).
+- **Names** carved into the stone surface as a projected decal (a dark groove with a lit lower edge) on the side facing the default view; tap a stone to read the wish itself. English UI by default, `?lang=ko` for Korean.
 - **Physics**: new stones fall under gravity, bounce once, squash-and-settle, kick up dust.
-- **Older stones** (beyond the newest 26) become an instanced mound the tower stands on, with a `+N` count.
+- **Older stones** (beyond the newest 20) become an instanced mound that grows up to meet the tower, so the tower never sinks as the window moves.
 - **Post**: ACES tone mapping, bloom, vignette. Mobile gets fewer particles, smaller shadow maps, lighter bloom.
 
 ## Usability

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>소원 돌탑</title>
-<meta name="description" content="모두가 함께 쌓는 소원 돌탑. 돌 하나 올리고 소원을 빌어요.">
+<title>Wish Cairn</title>
+<meta name="description" content="One stone tower, stacked by everyone. Add a stone, make a wish.">
 <meta name="theme-color" content="#0b0b16">
 <style>
   :root { --fg:#f3efe6; --muted:#b4ad9f; --accent:#f0b35b; --glass: rgba(14,13,24,.62); --line: rgba(255,255,255,.1); }
@@ -59,12 +59,12 @@
 </script>
 </head>
 <body>
-<canvas id="c" aria-label="소원 돌탑 3D 장면"></canvas>
-<div id="loading">돌탑을 불러오는 중…</div>
+<canvas id="c" aria-label="wish cairn 3D scene"></canvas>
+<div id="loading" data-i18n="loading">Loading the cairn…</div>
 
 <div class="hud top">
   <div class="brand">
-    <h1>🪨 소원 돌탑</h1>
+    <h1>🪨 <span data-i18n="title">Wish Cairn</span></h1>
     <div class="stats">
       <span><b id="total">0</b> <span data-i18n="stones">개의 돌</span></span>
       <span><b id="watching">1</b> <span data-i18n="watching">명이 함께</span></span>
@@ -106,13 +106,14 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ImprovedNoise } from "three/addons/math/ImprovedNoise.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 
 // ================================================================== i18n
 const T = {
-  ko: { stones:"개의 돌", watching:"명이 함께", recent:"최근 소원", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택) · 돌에 새겨져요", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명", mine:"내 돌 보기", share:"링크 공유", copied:"링크를 복사했어요", landed:(n)=>`${n}님의 돌이 올라왔어요`, landedAnon:"누군가의 돌이 올라왔어요", hidden:(n)=>`아래에 ${n.toLocaleString()}개의 돌이 더 있어요` },
-  en: { stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
+  ko: { title:"소원 돌탑", loading:"돌탑을 불러오는 중…", stones:"개의 돌", watching:"명이 함께", recent:"최근 소원", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택) · 돌에 새겨져요", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명", mine:"내 돌 보기", share:"링크 공유", copied:"링크를 복사했어요", landed:(n)=>`${n}님의 돌이 올라왔어요`, landedAnon:"누군가의 돌이 올라왔어요", hidden:(n)=>`아래에 ${n.toLocaleString()}개의 돌이 더 있어요` },
+  en: { title:"Wish Cairn", loading:"Loading the cairn…", stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
 };
-const L = (navigator.language || "en").startsWith("ko") ? "ko" : "en";
+const L = new URLSearchParams(location.search).get("lang") === "ko" ? "ko" : "en"; // English by default; ?lang=ko for Korean
 const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
 document.documentElement.lang = L;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
@@ -291,13 +292,29 @@ function stoneGeometry(id, s) {
   g.scale(rx, ry, rz); g.computeVertexNormals();
   return { g, rx, ry, rz };
 }
-function labelTexture(name) {
-  const c = document.createElement("canvas"); c.width = 512; c.height = 160; const x = c.getContext("2d");
-  x.clearRect(0, 0, 512, 160);
-  x.font = `700 ${name.length > 8 ? 54 : 68}px ui-sans-serif, system-ui, "Noto Sans KR", sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
-  x.shadowColor = "rgba(0,0,0,.9)"; x.shadowBlur = 6; x.shadowOffsetY = 2;
-  x.fillStyle = "rgba(246,238,220,0.96)"; x.fillText(name, 256, 84);
+/** Carved-letter texture: a dark groove with a thin lit edge below it, like chisel work. */
+function engravingTexture(name) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 192; const x = c.getContext("2d");
+  x.clearRect(0, 0, 512, 192);
+  x.font = `600 ${name.length > 8 ? 58 : 74}px ui-serif, Georgia, "Noto Serif KR", serif`; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillStyle = "rgba(255,244,226,0.38)"; x.fillText(name, 256, 99);     // lit lower edge of the groove
+  x.fillStyle = "rgba(14,10,8,0.78)"; x.fillText(name, 256, 95);         // the groove
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+}
+const decalHelper = new THREE.Object3D();
+/** Project the name onto the stone's surface on the side facing the default camera (+z). Called once the stone is at rest. */
+function engrave(st) {
+  if (!st.data.name || st.label) return;
+  st.mesh.updateMatrixWorld(true);
+  const dir = new THREE.Vector3(0, 0, 1);
+  const th = Math.atan2(dir.z, dir.x) - st.mesh.rotation.y;
+  const rad = (st.rx * st.rz) / Math.hypot(st.rz * Math.cos(th), st.rx * Math.sin(th));
+  const point = st.mesh.position.clone().addScaledVector(dir, rad * 0.98);
+  decalHelper.position.copy(point); decalHelper.lookAt(point.clone().add(dir));
+  const size = new THREE.Vector3(Math.min(st.rx * 1.1, 1.6), Math.min(st.rx * 1.1, 1.6) * 0.375, 0.5);
+  const geo = new DecalGeometry(st.mesh, point, decalHelper.rotation, size);
+  const mat = new THREE.MeshStandardMaterial({ map: engravingTexture(st.data.name), transparent: true, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, roughness: 0.95, metalness: 0 });
+  st.label = new THREE.Mesh(geo, mat); st.label.renderOrder = 1; scene.add(st.label);
 }
 function layoutIndex(i, n) { return i - (n - 1); } // 0 = top stone, negative below
 
@@ -311,24 +328,20 @@ function buildStone(data, idx) {
   mesh.rotation.y = r() * Math.PI * 2; mesh.rotation.z = (r() - .5) * 0.08; mesh.rotation.x = (r() - .5) * 0.06;
   mesh.userData.id = data.id;
   const st = { data, mesh, rx, ry, rz, ox: (r() - .5) * 0.26, oz: (r() - .5) * 0.26, label: null };
-  if (data.name) {
-    const lab = new THREE.Mesh(new THREE.PlaneGeometry(rx * 1.25, rx * 0.39), new THREE.MeshBasicMaterial({ map: labelTexture(data.name), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-    lab.renderOrder = 2; st.label = lab; scene.add(lab);
-  }
   scene.add(mesh);
   return st;
 }
-/** Stack positions bottom→top. */
-function relayout() {
-  let y = 0.02;
-  stones.forEach((st, i) => {
-    y += st.ry;
-    st.targetY = y; st.mesh.position.set(st.ox, st.falling ? st.mesh.position.y : y, st.oz);
-    y += st.ry - 0.05;
-  });
-  towerTop = y;
+/**
+ * Stones keep the y they were given: the tower never sinks when old stones
+ * leave the window — the mound below simply grows up to meet it.
+ */
+let towerTop = 0.02;
+function place(st) {
+  const y = towerTop + st.ry;
+  st.targetY = y; st.mesh.position.set(st.ox, y, st.oz);
+  towerTop = y + st.ry - 0.05;
 }
-let towerTop = 0;
+function lowestY() { return stones.length ? stones[0].mesh.position.y - stones[0].ry : 0; }
 
 const hiddenPile = (() => { // the stones you can't see become the mound the tower stands on
   const g = new THREE.IcosahedronGeometry(1, 2);
@@ -336,10 +349,12 @@ const hiddenPile = (() => { // the stones you can't see become the mound the tow
   for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); v.multiplyScalar(1 + noise.noise(v.x * 2, v.y * 2, v.z * 2) * 0.2); p.setXYZ(i, v.x, v.y * 0.45, v.z); }
   g.computeVertexNormals();
   const mesh = new THREE.InstancedMesh(g, stoneMat, 600); mesh.count = 0; mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
-  return { mesh, set(count) {
-    const n = Math.min(600, count); mesh.count = n; const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pz = new THREE.Vector3(), sc = new THREE.Vector3();
-    for (let i = 0; i < n; i++) { const r = seeded(i + 1000); const a = r() * Math.PI * 2, rad = 1.1 + Math.pow(r(), 0.6) * (2.2 + Math.log2(n + 1) * 0.35), s = 0.28 + r() * 0.3;
-      pz.set(Math.cos(a) * rad, s * 0.35 + Math.max(0, 0.55 - rad * 0.14), Math.sin(a) * rad); q.setFromEuler(new THREE.Euler(r() * 0.5, r() * 6.28, r() * 0.5)); sc.setScalar(s); m.compose(pz, q, sc); mesh.setMatrixAt(i, m); }
+  return { mesh, set(count, top) {
+    const n = Math.min(600, Math.max(count, top > 0.3 ? 40 : 0)); mesh.count = n; const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pz = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (let i = 0; i < n; i++) { const r = seeded(i + 1000); const a = r() * Math.PI * 2, s = 0.3 + r() * 0.32;
+      const h = r() * Math.max(0, top - 0.1);                                    // how high up the pile this stone sits
+      const rad = (0.5 + r() * 0.5) * (1.2 + (1 - h / Math.max(top, 0.1)) * (1.4 + Math.log2(n + 1) * 0.3)); // narrower toward the top
+      pz.set(Math.cos(a) * rad, h + s * 0.3, Math.sin(a) * rad); q.setFromEuler(new THREE.Euler(r() * 0.5, r() * 6.28, r() * 0.5)); sc.setScalar(s); m.compose(pz, q, sc); mesh.setMatrixAt(i, m); }
     mesh.instanceMatrix.needsUpdate = true; mesh.visible = n > 0;
   } };
 })();
@@ -348,18 +363,18 @@ function setStones(list, totalCount) {
   for (const st of stones) { scene.remove(st.mesh); st.mesh.geometry.dispose(); if (st.label) scene.remove(st.label); }
   stones.length = 0; byId.clear();
   const vis = list.slice(-VISIBLE);
-  vis.forEach((d, i) => { const st = buildStone(d, layoutIndex(i, vis.length) * -1); stones.push(st); byId.set(d.id, st); });
+  towerTop = 0.02;
+  vis.forEach((d, i) => { const st = buildStone(d, layoutIndex(i, vis.length) * -1); place(st); engrave(st); stones.push(st); byId.set(d.id, st); });
   lastId = list.at(-1)?.id ?? 0; total = totalCount;
-  relayout(); hiddenPile.set(total - vis.length); updateHud();
+  hiddenPile.set(total - vis.length, lowestY()); updateHud();
 }
 function addStone(d, animate) {
   if (byId.has(d.id) || d.id <= lastId) return;
   lastId = d.id; total = Math.max(total, d.id ? total + 1 : total);
-  const st = buildStone(d, 0); stones.push(st); byId.set(d.id, st);
+  const st = buildStone(d, 0); place(st); stones.push(st); byId.set(d.id, st);
   while (stones.length > VISIBLE) { const old = stones.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); if (old.label) scene.remove(old.label); byId.delete(old.data.id); }
-  relayout(); hiddenPile.set(total - stones.length);
-  if (animate) { st.falling = true; st.vy = 0; st.mesh.position.y = st.targetY + 7; st.mesh.scale.set(1, 1, 1); }
-  // older stones in the window are re-indexed; recompute their size subtly is skipped to keep them stable.
+  hiddenPile.set(total - stones.length, lowestY());
+  if (animate) { st.falling = true; st.vy = 0; st.mesh.position.y = st.targetY + 7; st.mesh.scale.set(1, 1, 1); } else engrave(st);
   updateHud(); addToFeed(d);
   return st;
 }
@@ -390,15 +405,7 @@ function tick() {
         else { st.falling = false; st.vy = 0; st.squash = Math.max(st.squash ?? 0, 0.5); }
       }
     }
-    if (st.squash > 0) { st.squash -= dt * 3.2; const q = Math.max(0, st.squash); st.mesh.scale.set(1 + q * 0.16, 1 - q * 0.22, 1 + q * 0.16); }
-    if (st.label) { // engraved name on the side facing the camera, sitting just outside the stone's surface
-      tmpV.subVectors(camera.position, st.mesh.position); tmpV.y = 0; tmpV.normalize();
-      const th = Math.atan2(tmpV.z, tmpV.x) - st.mesh.rotation.y;
-      const rad = (st.rx * st.rz) / Math.hypot(st.rz * Math.cos(th), st.rx * Math.sin(th)) * 1.1 + 0.03;
-      st.label.position.copy(st.mesh.position).addScaledVector(tmpV, rad);
-      st.label.position.y += st.ry * 0.05;
-      st.label.lookAt(camera.position.x, st.label.position.y, camera.position.z);
-    }
+    if (st.squash > 0 && !st.label) { st.squash -= dt * 3.2; const q = Math.max(0, st.squash); st.mesh.scale.set(1 + q * 0.16, 1 - q * 0.22, 1 + q * 0.16); if (st.squash <= 0) { st.mesh.scale.set(1, 1, 1); engrave(st); } }
     if (st.glow) { st.glow -= dt * 0.5; const g = Math.max(0, st.glow); st.mesh.material.emissive.setRGB(1, 0.62, 0.28).multiplyScalar(g * 0.16 * (0.6 + 0.4 * Math.sin(time * 5))); }
   }
   dust.tick(dt);
@@ -482,7 +489,7 @@ form.addEventListener("submit", async (ev) => {
 $("mine").addEventListener("click", () => { const st = mine && byId.get(mine.id); if (st) focusOn(st); else toast(t("hidden", total - stones.length)); });
 $("share").addEventListener("click", async () => {
   const url = `${location.origin}/?s=${mine?.id ?? ""}`;
-  if (navigator.share) { try { await navigator.share({ title: "소원 돌탑", text: mine?.wish, url }); return; } catch {} }
+  if (navigator.share) { try { await navigator.share({ title: t("title"), text: mine?.wish, url }); return; } catch {} }
   try { await navigator.clipboard.writeText(url); toast(t("copied")); } catch {}
 });
 try { nameEl.value = localStorage.getItem("cairn_name") || ""; } catch {}
