@@ -55,7 +55,7 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 space-y-6">
       <div className="card overflow-hidden">
-        <RitualScene visual={c.visual} count={wish.channel.wishCount} hue={c.hue} labels={labels} rarities={[wish.rarity, ...recent.items.filter((w) => w.id !== wish.id).map((w) => w.rarity)]} />
+        <RitualScene channelId={c.id} visual={c.visual} count={wish.channel.wishCount} hue={c.hue} labels={labels} rarities={[wish.rarity, ...recent.items.filter((w) => w.id !== wish.id).map((w) => w.rarity)]} />
       </div>
       <div className="card p-6 space-y-3">
         <div className="flex items-center justify-between">
@@ -101,7 +101,7 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
             wishId={wish.id}
             shareUrl={shareUrl}
             text={`${c.emoji} ${wish.text}`}
-            labels={{ share: d.shareLoop.native, copy: d.shareLoop.copy, copied: d.shareLoop.copied, download: d.shareLoop.download, x: "X", story: d.shareLoop.story, square: d.shareLoop.square }}
+            labels={{ share: d.shareLoop.native, copy: d.shareLoop.copy, copied: d.shareLoop.copied, download: d.shareLoop.download, x: "X", story: d.shareLoop.story, square: d.shareLoop.square, video: d.shareLoop.video, videoRendering: d.shareLoop.videoRendering, videoReady: d.shareLoop.videoReady, videoFailed: d.shareLoop.videoFailed }}
           />
         </div>
       )}

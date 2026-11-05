@@ -5,6 +5,7 @@
  * The visitor's name is "inscribed" on the ritual object of their channel:
  * a stone, a plaque, a coin, a lantern, a ribbon...
  */
+import React from "react";
 import type { ChannelDef, ChannelVisual, Locale } from "./channels";
 import { RARITY_STYLE, type Rarity } from "./relics";
 
@@ -41,7 +42,12 @@ const S = (o: React.CSSProperties): React.CSSProperties =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as React.CSSProperties;
 
 /** The ritual object with the wisher's name on it. */
-function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: string; hue: number; size: number }) {
+/**
+ * `glow=false` drops blur shadows and `flat=true` replaces gradients with solid
+ * fills; both exist because blur and gradient masks are what make resvg slow
+ * when rendering video frames.
+ */
+export function Token({ visual, name, hue, size, glow: glowOn = true, flat = false }: { visual: ChannelVisual; name: string; hue: number; size: number; glow?: boolean; flat?: boolean }) {
   const label = S({
     display: "flex",
     color: "#1a1208",
@@ -53,7 +59,7 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
     overflow: "hidden",
   });
   const flex = S({ display: "flex", alignItems: "center", justifyContent: "center" });
-  const glow = `0 0 ${size * 0.25}px hsl(${hue} 80% 60% / 0.55)`;
+  const glow = glowOn ? `0 0 ${size * 0.25}px hsl(${hue} 80% 60% / 0.55)` : "none";
 
   switch (visual) {
     case "cairn":
@@ -80,7 +86,7 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
     case "fountain":
       return (
         <div style={{ ...flex, width: size, height: size }}>
-          <div style={{ ...flex, width: size * 0.78, height: size * 0.78, borderRadius: "50%", background: "linear-gradient(135deg,#ffe29a,#d9a441)", border: `8px solid #b8862b`, boxShadow: glow }}>
+          <div style={{ ...flex, width: size * 0.78, height: size * 0.78, borderRadius: "50%", background: flat ? "#edc55f" : "linear-gradient(135deg,#ffe29a,#d9a441)", border: `8px solid #b8862b`, boxShadow: glow }}>
             <span style={{ ...label, color: "#5a3d0a" }}>{name}</span>
           </div>
         </div>
@@ -88,7 +94,7 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
     case "lantern":
       return (
         <div style={{ ...flex, flexDirection: "column", width: size, height: size }}>
-          <div style={{ ...flex, width: size * 0.6, height: size * 0.72, borderRadius: size * 0.08, background: "linear-gradient(180deg,#ffb060,#ff7a1f)", boxShadow: `0 0 ${size * 0.35}px rgba(255,160,60,.7)` }}>
+          <div style={{ ...flex, width: size * 0.6, height: size * 0.72, borderRadius: size * 0.08, background: flat ? "#ff9640" : "linear-gradient(180deg,#ffb060,#ff7a1f)", boxShadow: glowOn ? `0 0 ${size * 0.35}px rgba(255,160,60,.7)` : "none" }}>
             <span style={{ ...label, color: "#5a2a00" }}>{name}</span>
           </div>
           <div style={{ width: size * 0.2, height: size * 0.06, background: "#ffd27f", marginTop: 4 }} />
@@ -109,7 +115,7 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
     case "wall":
       return (
         <div style={{ ...flex, width: size, height: size }}>
-          <div style={{ ...flex, width: size * 0.7, height: size * 0.45, background: "#fdf6e3", border: "3px solid #bfae8c", transform: "rotate(-8deg)", boxShadow: "0 10px 30px rgba(0,0,0,.4)" }}>
+          <div style={{ ...flex, width: size * 0.7, height: size * 0.45, background: "#fdf6e3", border: "3px solid #bfae8c", transform: "rotate(-8deg)", boxShadow: glowOn ? "0 10px 30px rgba(0,0,0,.4)" : "none" }}>
             <span style={{ ...label, color: "#6b5a3a", fontSize: size * 0.09 }}>{name}</span>
           </div>
         </div>
@@ -119,7 +125,7 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
     case "krathong":
       return (
         <div style={{ ...flex, flexDirection: "column", width: size, height: size }}>
-          <div style={{ width: size * 0.1, height: size * 0.2, borderRadius: "50%", background: "#ffcf5c", boxShadow: `0 0 ${size * 0.3}px rgba(255,200,90,.8)` }} />
+          <div style={{ width: size * 0.1, height: size * 0.2, borderRadius: "50%", background: "#ffcf5c", boxShadow: glowOn ? `0 0 ${size * 0.3}px rgba(255,200,90,.8)` : "none" }} />
           <div
             style={{
               ...flex,
@@ -140,9 +146,9 @@ function Token({ visual, name, hue, size }: { visual: ChannelVisual; name: strin
         <div style={{ ...flex, flexDirection: "column", width: size, height: size }}>
           <div style={{ ...flex, position: "relative", width: size * 0.5, height: size * 0.5 }}>
             {[0, 45, 90, 135].map((deg) => (
-              <div key={deg} style={{ position: "absolute", width: size * 0.5, height: size * (deg % 90 ? 0.03 : 0.06), borderRadius: size, background: "#fff", transform: `rotate(${deg}deg)`, boxShadow: `0 0 ${size * 0.15}px hsl(${hue} 90% 70%)` }} />
+              <div key={deg} style={{ position: "absolute", width: size * 0.5, height: size * (deg % 90 ? 0.03 : 0.06), borderRadius: size, background: "#fff", transform: `rotate(${deg}deg)`, boxShadow: glowOn ? `0 0 ${size * 0.15}px hsl(${hue} 90% 70%)` : "none" }} />
             ))}
-            <div style={{ position: "absolute", width: size * 0.12, height: size * 0.12, borderRadius: "50%", background: "#fff", boxShadow: `0 0 ${size * 0.3}px hsl(${hue} 90% 75%)` }} />
+            <div style={{ position: "absolute", width: size * 0.12, height: size * 0.12, borderRadius: "50%", background: "#fff", boxShadow: glowOn ? `0 0 ${size * 0.3}px hsl(${hue} 90% 75%)` : "none" }} />
           </div>
           <span style={{ ...label, color: "#fff", fontSize: size * 0.12 }}>{name}</span>
         </div>

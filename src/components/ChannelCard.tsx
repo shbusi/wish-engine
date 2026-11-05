@@ -5,7 +5,7 @@ export function ChannelCard({ c, locale, count }: { c: ChannelDef; locale: Local
   return (
     <a href={`/c/${c.id}`} className="card overflow-hidden hover:border-white/25 transition group block">
       <div className="aspect-[2/1] overflow-hidden bg-black/30">
-        <RitualScene visual={c.visual} count={count} hue={c.hue} />
+        <RitualScene channelId={c.id} visual={c.visual} count={count} hue={c.hue} />
       </div>
       <div className="p-4">
         <div className="flex items-center justify-between gap-2">

@@ -1,0 +1,6 @@
+{
+  "$schema": "./manifest.schema.json",
+  "version": 1,
+  "_comment": "Drop generated artwork here. Empty = the code falls back to the built-in SVG scenes and CSS tokens. See docs/ART_DIRECTION.md.",
+  "channels": {}
+}

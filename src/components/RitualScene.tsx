@@ -1,4 +1,5 @@
 import type { ChannelVisual } from "@/lib/channels";
+import { channelArt } from "@/lib/art";
 
 /**
  * Data-driven SVG scene for each ritual. `count` is the channel's total
@@ -22,10 +23,13 @@ export function RitualScene({
   hue,
   labels = [],
   rarities = [],
+  channelId,
 }: {
   visual: ChannelVisual;
   count: number;
   hue: number;
+  /** When given and the art manifest has a background plate for it, the plate is drawn under the objects. */
+  channelId?: string;
   labels?: (string | null)[];
   /** Aligned with labels: "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY". Rare objects glow. */
   rarities?: (string | null)[];
@@ -317,8 +321,10 @@ export function RitualScene({
     }
   }
 
+  const plate = channelId ? channelArt(channelId)?.background : undefined;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto rounded-2xl" role="img" aria-label={`${visual} scene with ${count} wishes`}>
+      {plate && <image href={plate} x={0} y={0} width={W} height={H} preserveAspectRatio="xMidYMid slice" />}
       {body}
     </svg>
   );

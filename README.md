@@ -35,6 +35,17 @@ name inscribed on their ritual object, Open Graph metadata for link previews, an
 native share (PNG attached), X, copy link and downloads. Shared links carry `?s=1`; a wish made after
 following one is attributed back ("N people wished after seeing this").
 
+**Drop video:** `/w/:id/video` renders a 4.8s 1080×1920 MP4 of the drop moment (object falls into
+place, impact flash, name inscribed, rarity reveal for relics, CTA). Satori lays out each frame,
+native resvg rasterizes them in parallel on the libuv threadpool, raw RGBA is piped into ffmpeg, and
+the gradient/glow plates are rasterized once and composited by ffmpeg. A 96-frame video takes about
+5–10s on 4 cores. Rendered once per wish, cached under `VIDEO_CACHE_DIR`; the share bar polls until
+ready. The timeline is pure and tested (`src/lib/video-timeline.ts`).
+
+**Art pipeline:** `public/art/manifest.json` is the seam where generated 2D/3D assets replace the
+built-in SVG/CSS rendering per channel. See `docs/ART_DIRECTION.md` for the style bible, model
+choices (Flux + LoRA, Kling/Veo for loops, Hunyuan3D for props) and the quality gates.
+
 **Rare drops & auctions:** when a wish is offered a rarity is rolled (Common 94% · Uncommon 5% ·
 Rare 0.9% · Legendary 0.1%). Anything above Common mints a **Relic**, a culturally specific variant of
 the ritual object (옥돌 Jade Stone, 金箔の絵馬 Gilded Ema, Ancient Roman Coin, Dragon Lantern …) owned
@@ -102,6 +113,7 @@ only on the first transition, refunds reverse the counter. Webhook event ids are
 | `POST` | `/api/credits/checkout` | Buy a credit pack → `{ redirectUrl }` (mints wallet cookie) |
 | `POST` | `/api/credits/claim` | Restore a wallet from its recovery code |
 | `GET` | `/w/:id/card?f=story\|og\|square` | PNG share card (1080×1920 / 1200×630 / 1080×1080) |
+| `GET` | `/w/:id/video` | 9:16 MP4 of the drop moment; `202 { status, progress }` while rendering, `?status=1` to poll |
 | `POST` | `/api/wishes/:id/share` | Count a share click |
 | `POST` | `/api/auctions` | List a relic you own `{ relicId, hours: 24\|72, minBidCredits? }` |
 | `POST` | `/api/auctions/:id/bid` | Bid credits `{ credits }` (402 when short) |
@@ -138,7 +150,10 @@ handles rejected, 10 requests per minute per IP (in-memory; use Redis for multi-
    lazily, so this is a safety net, not a requirement.
 7. Rarity odds are env-tunable (`RARITY_LEGENDARY_BP`, `RARITY_RARE_BP`, `RARITY_UNCOMMON_BP`, basis
    points of 10,000) for events. `RARITY_FORCE=RARE` works outside production (or on staging with `ALLOW_MOCK_PAYMENTS=1`) for testing.
-8. Share cards fetch per-text font subsets from Google Fonts at render time (cached in memory); allow
+8. Videos need ffmpeg (`ffmpeg-static` is bundled; override with `FFMPEG_PATH`) and a long-running
+   Node process (a render takes 5–10s; `VIDEO_RASTER_PARALLEL` defaults to 4, match it to cores). On serverless hosts move `src/lib/video.tsx` to a worker and
+   point `VIDEO_CACHE_DIR` at shared storage. `VIDEO_MAX_CONCURRENT` caps parallel renders.
+9. Share cards fetch per-text font subsets from Google Fonts at render time (cached in memory); allow
    `fonts.googleapis.com` and `fonts.gstatic.com` egress.
 
 ### ⚠️ The ₩100 economics
@@ -169,6 +184,10 @@ src/lib/relics.ts          rarity odds + per-channel relic variants (12 × 3 tie
 src/lib/auctions.ts        list / bid / outbid refund / anti-snipe / settle with fee
 src/lib/card.tsx           Satori share card with the name inscribed on the ritual object
 src/lib/fonts.ts           per-text Google Fonts subsets by detected script
+src/lib/video-timeline.ts  pure drop-moment timeline (easings, per-frame params)
+src/lib/video.tsx          Satori → native resvg (parallel) → ffmpeg MP4, job queue, disk cache
+src/lib/art.ts             art manifest loader (public/art/manifest.json)
+docs/ART_DIRECTION.md      style bible + 2D/3D/motion generation pipeline
 src/middleware.ts          ?s=1 share links → attribution cookie
 src/app/                   pages: / · /c/[slug] · /w/[id] · /credits · /auctions · /auctions/[id] · /about
 src/app/api/               routes listed above

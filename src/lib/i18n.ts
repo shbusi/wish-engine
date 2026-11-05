@@ -74,6 +74,10 @@ const dict = {
       download: "카드 저장",
       story: "세로 카드 (9:16)",
       square: "정사각 카드",
+      video: "드롭 영상 (9:16 MP4)",
+      videoRendering: "영상 만드는 중",
+      videoReady: "영상 저장됨",
+      videoFailed: "영상 생성 실패",
       joined: "이 소원을 보고 {n}명이 이어서 소원을 빌었어요",
     },
     relic: {
@@ -191,6 +195,10 @@ const dict = {
       download: "Save card",
       story: "Story card (9:16)",
       square: "Square card",
+      video: "Drop video (9:16 MP4)",
+      videoRendering: "Rendering",
+      videoReady: "Video saved",
+      videoFailed: "Video failed",
       joined: "{n} people wished after seeing this one",
     },
     relic: {
@@ -308,6 +316,10 @@ const dict = {
       download: "カードを保存",
       story: "縦型カード (9:16)",
       square: "正方形カード",
+      video: "ドロップ動画 (9:16 MP4)",
+      videoRendering: "生成中",
+      videoReady: "動画を保存しました",
+      videoFailed: "動画の生成に失敗",
       joined: "この願いを見て{n}人が続けて願いました",
     },
     relic: {
@@ -425,6 +437,10 @@ const dict = {
       download: "保存卡片",
       story: "竖版卡片 (9:16)",
       square: "方形卡片",
+      video: "掉落视频 (9:16 MP4)",
+      videoRendering: "生成中",
+      videoReady: "视频已保存",
+      videoFailed: "视频生成失败",
       joined: "{n}人看到这个愿望后也许了愿",
     },
     relic: {

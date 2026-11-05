@@ -16,10 +16,34 @@ export function ShareBar({
   wishId: string;
   shareUrl: string;
   text: string;
-  labels: { share: string; copy: string; copied: string; download: string; x: string; story: string; square: string };
+  labels: { share: string; copy: string; copied: string; download: string; x: string; story: string; square: string; video: string; videoRendering: string; videoReady: string; videoFailed: string };
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [video, setVideo] = useState<{ state: "idle" | "rendering" | "ready" | "failed"; progress: number }>({ state: "idle", progress: 0 });
+  const videoUrl = `/w/${wishId}/video`;
+
+  /** Ask the server for the MP4; poll until it is rendered, then download. */
+  async function makeVideo() {
+    count();
+    setVideo({ state: "rendering", progress: 0 });
+    for (let i = 0; i < 120; i++) {
+      const res = await fetch(videoUrl, { headers: { Accept: "application/json, video/mp4" } });
+      if (res.status === 200) {
+        setVideo({ state: "ready", progress: 1 });
+        const a = document.createElement("a");
+        a.href = videoUrl;
+        a.download = `wish-${wishId}.mp4`;
+        a.click();
+        return;
+      }
+      if (res.status !== 202) break;
+      const j = await res.json().catch(() => ({ progress: 0 }));
+      setVideo({ state: "rendering", progress: j.progress ?? 0 });
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    setVideo({ state: "failed", progress: 0 });
+  }
   const cardStory = `/w/${wishId}/card?f=story`;
   const cardSquare = `/w/${wishId}/card?f=square`;
 
@@ -81,6 +105,16 @@ export function ShareBar({
         <a className="btn btn-ghost" href={cardSquare} download={`wish-${wishId}-square.png`} onClick={count}>
           ⬇️ {labels.square}
         </a>
+        <button className="btn btn-ghost" onClick={makeVideo} disabled={video.state === "rendering"}>
+          🎬{" "}
+          {video.state === "rendering"
+            ? `${labels.videoRendering} ${Math.round(video.progress * 100)}%`
+            : video.state === "ready"
+              ? labels.videoReady
+              : video.state === "failed"
+                ? labels.videoFailed
+                : labels.video}
+        </button>
       </div>
       <a href={cardStory} target="_blank" rel="noreferrer" className="block card overflow-hidden max-w-[220px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
