@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { captureOrder } from "@/lib/payments/paypal";
-import { settlePayment } from "@/lib/wishes";
+import { settlePayment, afterPaymentUrl } from "@/lib/wishes";
 
 export const runtime = "nodejs";
 
@@ -24,5 +24,5 @@ export async function GET(req: Request) {
       console.error("paypal capture", err);
     }
   }
-  return NextResponse.redirect(`${base}/w/${payment.wishId}`);
+  return NextResponse.redirect(afterPaymentUrl(base, payment));
 }

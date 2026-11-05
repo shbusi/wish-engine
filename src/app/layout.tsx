@@ -24,6 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span className="hidden sm:inline text-xs text-[var(--muted)] font-normal ml-2">{d.tagline}</span>
             </a>
             <nav className="flex items-center gap-4 text-sm">
+              <a href="/credits" className="text-[var(--muted)] hover:text-[var(--fg)]">🎟️ {d.credits.title}</a>
               <a href="/about" className="text-[var(--muted)] hover:text-[var(--fg)]">{d.about}</a>
               <LocaleSwitcher current={locale} />
             </nav>

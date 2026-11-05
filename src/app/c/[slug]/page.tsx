@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n";
 import { currentLocale } from "@/lib/locale-server";
 import { enabledProviders } from "@/lib/payments";
 import { listOfferedWishes } from "@/lib/wishes";
+import { currentWallet } from "@/lib/credits";
 import { RitualScene } from "@/components/RitualScene";
 import { WishForm } from "@/components/WishForm";
 import { WishWall } from "@/components/WishWall";
@@ -20,11 +21,12 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
 
   const dayAgo = new Date(Date.now() - 86_400_000);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [row, today, week, page] = await Promise.all([
+  const [row, today, week, page, wallet] = await Promise.all([
     prisma.channel.findUnique({ where: { id: c.id } }),
     prisma.wish.count({ where: { channelId: c.id, status: "OFFERED", offeredAt: { gte: dayAgo } } }),
     prisma.wish.count({ where: { channelId: c.id, status: "OFFERED", offeredAt: { gte: weekAgo } } }),
     listOfferedWishes({ channelId: c.id, take: 20 }),
+    currentWallet(),
   ]);
   const count = row?.wishCount ?? 0;
 
@@ -55,7 +57,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
       <div className="grid gap-8 lg:grid-cols-5">
         <section className="lg:col-span-2 card p-5 h-fit">
           <h2 className="text-lg font-semibold mb-3">{d.makeWish}</h2>
-          <WishForm channelId={c.id} locale={locale} d={d} providers={enabledProviders()} actionLabel={c.action[locale]} />
+          <WishForm channelId={c.id} locale={locale} d={d} providers={enabledProviders()} actionLabel={c.action[locale]} credits={wallet?.credits ?? 0} />
         </section>
         <section className="lg:col-span-3">
           <h2 className="text-lg font-semibold mb-3">{d.recentWishes}</h2>

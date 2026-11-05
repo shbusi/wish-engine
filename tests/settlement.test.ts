@@ -14,10 +14,13 @@ let prisma: typeof import("../src/lib/db").prisma;
 let settlePayment: typeof import("../src/lib/wishes").settlePayment;
 let claimWebhookEvent: typeof import("../src/lib/wishes").claimWebhookEvent;
 let listOfferedWishes: typeof import("../src/lib/wishes").listOfferedWishes;
+let spendOneCredit: typeof import("../src/lib/credits").spendOneCredit;
+let createWallet: typeof import("../src/lib/credits").createWallet;
 
 before(async () => {
   ({ prisma } = await import("../src/lib/db"));
   ({ settlePayment, claimWebhookEvent, listOfferedWishes } = await import("../src/lib/wishes"));
+  ({ spendOneCredit, createWallet } = await import("../src/lib/credits"));
   await prisma.channel.create({ data: { id: "stone-cairn" } });
 });
 after(async () => prisma.$disconnect());
@@ -71,4 +74,38 @@ test("webhook event ids are claimed once", async () => {
 
 test("unknown providerRef is a no-op", async () => {
   assert.equal(await settlePayment({ provider: "paypal", providerRef: "nope", outcome: "PAID" }), null);
+});
+
+test("credit pack: PAID adds credits once, refund claws back only what is unspent", async () => {
+  const wallet = await createWallet();
+  assert.match(wallet.token, /^WE-[A-Z0-9]{6}(-[A-Z0-9]{1,6}){3}$/);
+  const purchase = await prisma.creditPurchase.create({
+    data: {
+      walletId: wallet.id, packId: "pack-10", credits: 10, amountKrw: 1000,
+      payment: { create: { provider: "paypal", providerRef: "ORDER-1", currency: "USD", amount: "0.72", amountKrw: 1000 } },
+    },
+    include: { payment: true },
+  });
+  await settlePayment({ provider: "paypal", providerRef: "ORDER-1", outcome: "PAID" });
+  await settlePayment({ provider: "paypal", providerRef: "ORDER-1", outcome: "PAID" });
+  let w = await prisma.creditWallet.findUnique({ where: { id: wallet.id } });
+  assert.equal(w!.credits, 10);
+
+  // spend 3
+  for (let i = 0; i < 3; i++) assert.equal(await spendOneCredit(prisma, wallet.id, `wish${i}`), true);
+  w = await prisma.creditWallet.findUnique({ where: { id: wallet.id } });
+  assert.equal(w!.credits, 7);
+
+  await settlePayment({ provider: "paypal", paymentId: purchase.payment!.id, outcome: "REFUNDED" });
+  w = await prisma.creditWallet.findUnique({ where: { id: wallet.id } });
+  assert.equal(w!.credits, 0);
+  const txns = await prisma.creditTxn.findMany({ where: { walletId: wallet.id } });
+  assert.deepEqual(txns.map((t) => t.reason).sort(), ["purchase", "refund", "spend", "spend", "spend"]);
+});
+
+test("spending from an empty wallet fails atomically", async () => {
+  const wallet = await createWallet();
+  assert.equal(await spendOneCredit(prisma, wallet.id, "x"), false);
+  const w = await prisma.creditWallet.findUnique({ where: { id: wallet.id } });
+  assert.equal(w!.credits, 0);
 });

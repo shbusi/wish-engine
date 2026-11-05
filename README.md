@@ -25,6 +25,11 @@ part of that channel's living scene.
 | 🪔 Floating Diya | Float a diya | India · Nepal |
 | 🌠 Shooting Star | Wish on a star | Everywhere (secular) |
 
+**Credit packs:** ₩1,000 buys 10 wishes. Credits sit in an anonymous wallet tied to a cookie, with a
+recovery code (`WE-XXXXXX-…`) to restore it on another device. A wish paid with a credit skips checkout
+and is offered instantly. This is the economically sane path: one PayPal/crypto fee per 10 wishes
+instead of per wish.
+
 Each channel is fully localized in **ko / en / ja / zh** and has a data-driven SVG scene that grows
 with the number of offered wishes (`src/components/RitualScene.tsx`). Adding a channel is one entry
 in `src/lib/channels.ts` plus a `case` in the scene renderer.
@@ -81,6 +86,8 @@ only on the first transition, refunds reverse the counter. Webhook event ids are
 | `POST` | `/api/webhooks/crypto` | Crypto events (HMAC verified) |
 | `GET` | `/api/paypal/return?p=&token=` | Capture approved PayPal order |
 | `GET` | `/api/paypal/cancel?p=` | Buyer cancelled |
+| `POST` | `/api/credits/checkout` | Buy a credit pack → `{ redirectUrl }` (mints wallet cookie) |
+| `POST` | `/api/credits/claim` | Restore a wallet from its recovery code |
 | `POST` | `/api/mock/confirm` | Dev only: simulate outcome |
 | `GET` | `/api/locale?set=ko&back=/` | Set language cookie |
 
@@ -90,6 +97,9 @@ Request body for `POST /api/wishes`:
 { "channelId": "stone-cairn", "text": "…", "author": "optional", "locale": "ko",
   "isPublic": true, "amountKrw": 100, "provider": "paypal" }
 ```
+
+With `"provider": "credits"` the wallet in the cookie is debited one credit atomically and the wish is
+offered immediately (`402 insufficient_credits` otherwise).
 
 Validation: 2–280 chars, offering is a multiple of ₩100 up to ₩1,000,000, URLs / phone numbers /
 handles rejected, 10 requests per minute per IP (in-memory; use Redis for multi-instance).
@@ -115,21 +125,22 @@ on-chain gas on most L1s is worse. The product idea survives this only if:
 - users are nudged toward ₩1,000+ offerings (the form offers ₩100 / 500 / 1,000 / 5,000 presets), and/or
 - crypto runs on an L2 or a near-zero-fee chain (Base, Polygon, Solana USDC) via the hosted provider.
 
-₩100 should be read as the *symbolic minimum*, not the expected average ticket. A "10 wishes for
-₩1,000" credit pack is the obvious next step and fits the schema without changes (pre-paid credits
-would just skip straight to `OFFERED`).
+₩100 should be read as the *symbolic minimum*, not the expected average ticket. The ₩1,000 / 10-wish
+credit pack (`/credits`) is the default path to push users toward; the single ₩100 checkout stays for
+the "I just want to toss one coin" moment.
 
 ## Project layout
 
 ```
-prisma/schema.prisma       Channel · Wish · Payment · WebhookEvent
+prisma/schema.prisma       Channel · Wish · Payment · WebhookEvent · CreditWallet · CreditPurchase · CreditTxn
 prisma/seed.ts             channel rows (+ optional sample wishes)
 src/lib/channels.ts        the 12 rituals, localized
 src/lib/i18n.ts            UI strings ko/en/ja/zh + Accept-Language negotiation
 src/lib/money.ts           KRW base, FX, presets, validation
 src/lib/payments/          provider interface + mock / paypal / crypto adapters
-src/lib/wishes.ts          settlement (idempotent), wall queries
-src/app/                   pages: / · /c/[slug] · /w/[id] · /about · /pay/mock/[id]
+src/lib/wishes.ts          settlement (idempotent, wishes + credit purchases), wall queries
+src/lib/credits.ts         credit packs, anonymous wallet, atomic spend
+src/app/                   pages: / · /c/[slug] · /w/[id] · /credits · /about · /pay/mock/[id]
 src/app/api/               routes listed above
 src/components/            RitualScene (SVG), WishForm, WishWall, ChannelCard
 tests/                     node:test suites

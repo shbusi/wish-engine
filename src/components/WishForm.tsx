@@ -11,17 +11,21 @@ export function WishForm({
   d,
   providers,
   actionLabel,
+  credits = 0,
 }: {
   channelId: string;
   locale: Locale;
   d: Dict;
   providers: ProviderId[];
   actionLabel: string;
+  /** Credits in the visitor's wallet; when > 0 a "use 1 credit" option appears first. */
+  credits?: number;
 }) {
+  type PayChoice = ProviderId | "credits";
   const [text, setText] = useState("");
   const [author, setAuthor] = useState("");
   const [amount, setAmount] = useState<number>(OFFERING_PRESETS_KRW[0]);
-  const [provider, setProvider] = useState<ProviderId>(providers[0]);
+  const [provider, setProvider] = useState<PayChoice>(credits > 0 ? "credits" : providers[0]);
   const [isPublic, setIsPublic] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +45,7 @@ export function WishForm({
       const json = await res.json();
       if (!res.ok) {
         setError(
-          json.error === "rate_limited" ? d.errors.rate : json.error === "too_long" ? d.errors.tooLong : json.error === "too_short" ? d.errors.tooShort : d.errors.generic,
+          json.error === "rate_limited" ? d.errors.rate : json.error === "too_long" ? d.errors.tooLong : json.error === "too_short" ? d.errors.tooShort : json.error === "insufficient_credits" || json.error === "no_wallet" ? d.credits.insufficient : d.errors.generic,
         );
         return;
       }
@@ -53,7 +57,9 @@ export function WishForm({
     }
   }
 
-  if (providers.length === 0) {
+  const usingCredit = provider === "credits";
+
+  if (providers.length === 0 && credits === 0) {
     return <p className="text-sm text-[var(--muted)]">No payment provider is configured.</p>;
   }
 
@@ -77,7 +83,7 @@ export function WishForm({
         <input className="input mt-1" maxLength={40} value={author} onChange={(e) => setAuthor(e.target.value)} placeholder={d.namePlaceholder} />
       </label>
 
-      <div>
+      <div className={usingCredit ? "hidden" : ""}>
         <span className="text-sm text-[var(--muted)]">{d.offering}</span>
         <div className="mt-1 grid grid-cols-4 gap-2">
           {OFFERING_PRESETS_KRW.map((k) => (
@@ -98,6 +104,15 @@ export function WishForm({
       <div>
         <span className="text-sm text-[var(--muted)]">{d.payWith}</span>
         <div className="mt-1 flex gap-2 flex-wrap">
+          {credits > 0 && (
+            <button
+              type="button"
+              onClick={() => setProvider("credits")}
+              className={`card px-3 py-2 text-sm ${usingCredit ? "!border-[var(--accent)] text-[var(--accent)]" : ""}`}
+            >
+              🎟️ {d.credits.useCredit} ({credits})
+            </button>
+          )}
           {providers.map((p) => (
             <button
               type="button"
@@ -112,6 +127,10 @@ export function WishForm({
         </div>
       </div>
 
+      {!usingCredit && (
+        <a href="/credits" className="block text-xs text-[var(--accent)]">{d.credits.buyLink}</a>
+      )}
+
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
         {d.makePublic}
@@ -120,7 +139,7 @@ export function WishForm({
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <button className="btn w-full" disabled={busy}>
-        {busy ? d.submitting : `${actionLabel} · ${formatKrw(amount, locale)}`}
+        {busy ? d.submitting : usingCredit ? `${actionLabel} · 🎟️ 1` : `${actionLabel} · ${formatKrw(amount, locale)}`}
       </button>
     </form>
   );

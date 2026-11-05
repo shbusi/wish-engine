@@ -2,9 +2,9 @@ import { prisma } from "./db";
 import type { PaymentOutcome } from "./payments/types";
 
 /**
- * Apply a payment outcome to its wish. Idempotent: calling with the same
- * outcome twice is a no-op, and the channel counter only moves on the
- * first transition into OFFERED.
+ * Apply a payment outcome to whatever the payment is for — a wish or a
+ * credit-pack purchase. Idempotent: the same outcome twice is a no-op,
+ * channel counters and wallet balances only move on the first transition.
  */
 export async function settlePayment(opts: {
   provider: string;
@@ -14,24 +14,19 @@ export async function settlePayment(opts: {
   raw?: unknown;
 }) {
   const payment = opts.paymentId
-    ? await prisma.payment.findUnique({ where: { id: opts.paymentId }, include: { wish: true } })
-    : await prisma.payment.findFirst({
-        where: { provider: opts.provider, providerRef: opts.providerRef },
-        include: { wish: true },
-      });
+    ? await prisma.payment.findUnique({ where: { id: opts.paymentId } })
+    : await prisma.payment.findFirst({ where: { provider: opts.provider, providerRef: opts.providerRef } });
   if (!payment) return null;
 
   const paymentStatus = opts.outcome;
-  const wishStatus =
-    opts.outcome === "PAID" ? "OFFERED" : opts.outcome === "REFUNDED" ? "REFUNDED" : "FAILED";
 
   return prisma.$transaction(async (tx) => {
-    const fresh = await tx.payment.findUnique({ where: { id: payment.id }, include: { wish: true } });
+    const fresh = await tx.payment.findUnique({
+      where: { id: payment.id },
+      include: { wish: true, purchase: true },
+    });
     if (!fresh) return null;
     if (fresh.status === paymentStatus) return fresh; // already applied
-
-    const becomingOffered = fresh.wish.status !== "OFFERED" && wishStatus === "OFFERED";
-    const leavingOffered = fresh.wish.status === "OFFERED" && wishStatus !== "OFFERED";
 
     await tx.payment.update({
       where: { id: fresh.id },
@@ -40,21 +35,51 @@ export async function settlePayment(opts: {
         rawEvent: opts.raw ? JSON.stringify(opts.raw).slice(0, 20_000) : undefined,
       },
     });
-    await tx.wish.update({
-      where: { id: fresh.wishId },
-      data: {
-        status: wishStatus,
-        offeredAt: becomingOffered ? new Date() : fresh.wish.offeredAt,
-      },
-    });
-    if (becomingOffered || leavingOffered) {
-      await tx.channel.update({
-        where: { id: fresh.wish.channelId },
-        data: { wishCount: { increment: becomingOffered ? 1 : -1 } },
+
+    if (fresh.wish) {
+      const wishStatus =
+        opts.outcome === "PAID" ? "OFFERED" : opts.outcome === "REFUNDED" ? "REFUNDED" : "FAILED";
+      const becomingOffered = fresh.wish.status !== "OFFERED" && wishStatus === "OFFERED";
+      const leavingOffered = fresh.wish.status === "OFFERED" && wishStatus !== "OFFERED";
+      await tx.wish.update({
+        where: { id: fresh.wish.id },
+        data: { status: wishStatus, offeredAt: becomingOffered ? new Date() : fresh.wish.offeredAt },
       });
+      if (becomingOffered || leavingOffered) {
+        await tx.channel.update({
+          where: { id: fresh.wish.channelId },
+          data: { wishCount: { increment: becomingOffered ? 1 : -1 } },
+        });
+      }
+    }
+
+    if (fresh.purchase) {
+      const p = fresh.purchase;
+      const wasPaid = p.status === "PAID";
+      const nowPaid = opts.outcome === "PAID";
+      await tx.creditPurchase.update({ where: { id: p.id }, data: { status: opts.outcome } });
+      if (!wasPaid && nowPaid) {
+        await tx.creditWallet.update({ where: { id: p.walletId }, data: { credits: { increment: p.credits } } });
+        await tx.creditTxn.create({ data: { walletId: p.walletId, delta: p.credits, reason: "purchase", refId: p.id } });
+      } else if (wasPaid && !nowPaid) {
+        // Refund: claw back what is still unspent, never below zero.
+        const w = await tx.creditWallet.findUnique({ where: { id: p.walletId } });
+        const clawback = Math.min(w?.credits ?? 0, p.credits);
+        if (clawback > 0) {
+          await tx.creditWallet.update({ where: { id: p.walletId }, data: { credits: { decrement: clawback } } });
+          await tx.creditTxn.create({ data: { walletId: p.walletId, delta: -clawback, reason: "refund", refId: p.id } });
+        }
+      }
     }
     return fresh;
   });
+}
+
+/** Where to send the user after a payment resolves. */
+export function afterPaymentUrl(base: string, payment: { wishId: string | null; purchaseId: string | null }): string {
+  if (payment.wishId) return `${base}/w/${payment.wishId}`;
+  if (payment.purchaseId) return `${base}/credits?purchase=${payment.purchaseId}`;
+  return `${base}/`;
 }
 
 /** Record a webhook event id; returns false if we have already seen it. */

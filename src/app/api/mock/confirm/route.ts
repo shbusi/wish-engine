@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProvider } from "@/lib/payments";
-import { settlePayment } from "@/lib/wishes";
+import { settlePayment, afterPaymentUrl } from "@/lib/wishes";
 
 export const runtime = "nodejs";
 
@@ -13,5 +13,6 @@ export async function POST(req: Request) {
   }
   const p = await settlePayment({ provider: "mock", paymentId: body.paymentId, outcome: body.outcome });
   if (!p) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json({ ok: true, wishId: p.wishId });
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+  return NextResponse.json({ ok: true, wishId: p.wishId, nextUrl: afterPaymentUrl(base, p) });
 }

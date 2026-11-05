@@ -33,16 +33,20 @@ model Wish {
   offeredAt   DateTime?
   createdAt   DateTime @default(now())
   payment     Payment?
+  walletId    String?                 // set when paid with a credit
+  wallet      CreditWallet? @relation(fields: [walletId], references: [id])
 
   @@index([channelId, status, offeredAt])
 }
 
-/// Payment record, one per wish. Provider-agnostic.
+/// Payment record. Attached to exactly one of: a wish, or a credit-pack purchase.
 model Payment {
   id            String   @id @default(cuid())
-  wishId        String   @unique
-  wish          Wish     @relation(fields: [wishId], references: [id])
-  provider      String                 // "paypal" | "crypto" | "mock"
+  wishId        String?  @unique
+  wish          Wish?    @relation(fields: [wishId], references: [id])
+  purchaseId    String?  @unique
+  purchase      CreditPurchase? @relation(fields: [purchaseId], references: [id])
+  provider      String                 // "paypal" | "crypto" | "mock" | "credits"
   providerRef   String?                // PayPal order id / crypto charge id
   currency      String                 // charged currency, e.g. "USD", "USDC"
   amount        String                 // charged amount as decimal string
@@ -60,4 +64,44 @@ model WebhookEvent {
   id          String   @id            // provider event id
   provider    String
   receivedAt  DateTime @default(now())
+}
+
+/// Anonymous credit wallet. Identified by a secret token stored in a cookie
+/// (and shown once as a recovery code). ₩1,000 pack = 10 wishes.
+model CreditWallet {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  credits     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  purchases   CreditPurchase[]
+  txns        CreditTxn[]
+  wishes      Wish[]
+}
+
+model CreditPurchase {
+  id          String   @id @default(cuid())
+  walletId    String
+  wallet      CreditWallet @relation(fields: [walletId], references: [id])
+  packId      String
+  credits     Int
+  amountKrw   Int
+  status      String   @default("CREATED") // CREATED | PAID | FAILED | REFUNDED
+  createdAt   DateTime @default(now())
+  payment     Payment?
+
+  @@index([walletId, status])
+}
+
+/// Append-only ledger of credit movements.
+model CreditTxn {
+  id          String   @id @default(cuid())
+  walletId    String
+  wallet      CreditWallet @relation(fields: [walletId], references: [id])
+  delta       Int
+  reason      String   // purchase | spend | refund
+  refId       String?  // purchase id or wish id
+  createdAt   DateTime @default(now())
+
+  @@index([walletId, createdAt])
 }
