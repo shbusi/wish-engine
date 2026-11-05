@@ -66,6 +66,16 @@ const dict = {
       insufficient: "크레딧이 없습니다.",
       reason: { purchase: "충전", spend: "소원", refund: "환불" },
     },
+    shareLoop: {
+      hint: "카드를 저장해 릴스·쇼츠·틱톡에 올리거나, 링크를 공유하세요. 이 링크로 들어와 소원을 빌면 여기에 표시됩니다.",
+      native: "공유",
+      copy: "링크 복사",
+      copied: "복사됨",
+      download: "카드 저장",
+      story: "세로 카드 (9:16)",
+      square: "정사각 카드",
+      joined: "이 소원을 보고 {n}명이 이어서 소원을 빌었어요",
+    },
     mockPayTitle: "테스트 결제",
     mockPayBody: "개발용 결제 화면입니다. 실제 돈이 오가지 않습니다.",
     mockPayConfirm: "결제 완료 처리",
@@ -138,6 +148,16 @@ const dict = {
       purchaseDone: "Credits added.",
       insufficient: "No credits left.",
       reason: { purchase: "Pack", spend: "Wish", refund: "Refund" },
+    },
+    shareLoop: {
+      hint: "Save the card for Reels, Shorts or TikTok, or share the link. Anyone who wishes after arriving through it shows up here.",
+      native: "Share",
+      copy: "Copy link",
+      copied: "Copied",
+      download: "Save card",
+      story: "Story card (9:16)",
+      square: "Square card",
+      joined: "{n} people wished after seeing this one",
     },
     mockPayTitle: "Test payment",
     mockPayBody: "Development-only checkout. No real money moves.",
@@ -212,6 +232,16 @@ const dict = {
       insufficient: "クレジットがありません。",
       reason: { purchase: "チャージ", spend: "願い", refund: "返金" },
     },
+    shareLoop: {
+      hint: "カードを保存してリール・ショート・TikTokに投稿するか、リンクを共有してください。そこから来て願った人がここに表示されます。",
+      native: "共有",
+      copy: "リンクをコピー",
+      copied: "コピー済み",
+      download: "カードを保存",
+      story: "縦型カード (9:16)",
+      square: "正方形カード",
+      joined: "この願いを見て{n}人が続けて願いました",
+    },
     mockPayTitle: "テスト決済",
     mockPayBody: "開発用の決済画面です。実際のお金は動きません。",
     mockPayConfirm: "支払い済みにする",
@@ -285,6 +315,16 @@ const dict = {
       insufficient: "没有剩余点数。",
       reason: { purchase: "充值", spend: "愿望", refund: "退款" },
     },
+    shareLoop: {
+      hint: "保存卡片发到Reels、Shorts或TikTok，或分享链接。通过链接来许愿的人会显示在这里。",
+      native: "分享",
+      copy: "复制链接",
+      copied: "已复制",
+      download: "保存卡片",
+      story: "竖版卡片 (9:16)",
+      square: "方形卡片",
+      joined: "{n}人看到这个愿望后也许了愿",
+    },
     mockPayTitle: "测试支付",
     mockPayBody: "仅供开发的支付页面，不会产生真实交易。",
     mockPayConfirm: "标记为已支付",
@@ -309,6 +349,11 @@ export type Dict = (typeof dict)["en"];
 
 export function t(locale: Locale): Dict {
   return (dict[locale] ?? dict.en) as Dict;
+}
+
+/** Fill `{n}`-style placeholders. */
+export function fmt(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
 }
 
 export function isLocale(x: unknown): x is Locale {

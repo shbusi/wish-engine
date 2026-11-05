@@ -35,6 +35,10 @@ model Wish {
   payment     Payment?
   walletId    String?                 // set when paid with a credit
   wallet      CreditWallet? @relation(fields: [walletId], references: [id])
+  // --- share loop
+  shareCount  Int      @default(0)    // share button clicks on this wish
+  referrals   Int      @default(0)    // wishes offered by people who arrived via this wish's shared link
+  viaWishId   String?                 // the wish whose shared link brought this wisher here
 
   @@index([channelId, status, offeredAt])
 }

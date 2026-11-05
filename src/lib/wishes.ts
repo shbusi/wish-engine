@@ -50,6 +50,12 @@ export async function settlePayment(opts: {
           where: { id: fresh.wish.channelId },
           data: { wishCount: { increment: becomingOffered ? 1 : -1 } },
         });
+        if (fresh.wish.viaWishId) {
+          await tx.wish.updateMany({
+            where: { id: fresh.wish.viaWishId },
+            data: { referrals: { increment: becomingOffered ? 1 : -1 } },
+          });
+        }
       }
     }
 
@@ -100,6 +106,7 @@ export const PUBLIC_WISH_SELECT = {
   locale: true,
   amountKrw: true,
   offeredAt: true,
+  referrals: true,
 } as const;
 
 export async function listOfferedWishes(opts: { channelId?: string; cursor?: string; take?: number }) {

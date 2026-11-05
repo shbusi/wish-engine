@@ -1,12 +1,34 @@
 import { notFound } from "next/navigation";
 import { getChannel } from "@/lib/channels";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n";
+import { t, fmt } from "@/lib/i18n";
 import { currentLocale } from "@/lib/locale-server";
 import { formatKrw } from "@/lib/money";
 import { RitualScene } from "@/components/RitualScene";
+import { ShareBar } from "@/components/ShareBar";
+import { listOfferedWishes } from "@/lib/wishes";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+function appBase() {
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const wish = await prisma.wish.findUnique({ where: { id } });
+  const c = wish ? getChannel(wish.channelId) : undefined;
+  if (!wish || !c || wish.status !== "OFFERED" || !wish.isPublic) return { title: "Wish Engine" };
+  const title = `${c.emoji} ${wish.text.slice(0, 60)}${wish.text.length > 60 ? "…" : ""}`;
+  const image = `${appBase()}/w/${wish.id}/card?f=og`;
+  return {
+    title,
+    description: `${c.name.en} · Wish Engine`,
+    openGraph: { title, description: c.description.en, images: [{ url: image, width: 1200, height: 630 }], type: "article" },
+    twitter: { card: "summary_large_image", title, images: [image] },
+  };
+}
 
 export default async function WishPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,11 +40,15 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
   const d = t(locale);
   const status = wish.status as keyof typeof d.status;
   const offered = status === "OFFERED";
+  const recent = offered ? await listOfferedWishes({ channelId: c.id, take: 20 }) : { items: [] };
+  // Make sure this wish's own name is inscribed even if it isn't in the newest page yet.
+  const labels = [wish.author, ...recent.items.filter((w) => w.id !== wish.id).map((w) => w.author)];
+  const shareUrl = `${appBase()}/w/${wish.id}?s=1`;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 space-y-6">
       <div className="card overflow-hidden">
-        <RitualScene visual={c.visual} count={wish.channel.wishCount} hue={c.hue} />
+        <RitualScene visual={c.visual} count={wish.channel.wishCount} hue={c.hue} labels={labels} />
       </div>
       <div className="card p-6 space-y-3">
         <div className="flex items-center justify-between">
@@ -40,20 +66,25 @@ export default async function WishPage({ params }: { params: Promise<{ id: strin
           — {wish.author || d.anonymous} · {formatKrw(wish.amountKrw, locale)}
           {wish.payment ? ` · ${d.provider[wish.payment.provider as keyof typeof d.provider] ?? wish.payment.provider}` : ""}
         </div>
+        {wish.referrals > 0 && (
+          <p className="text-sm text-[var(--accent)]">🔗 {fmt(d.shareLoop.joined, { n: wish.referrals })}</p>
+        )}
         <div className="flex gap-3 pt-2">
           <a className="btn btn-ghost" href={`/c/${c.id}`}>{d.backToChannel}</a>
-          {offered && wish.isPublic && (
-            <a
-              className="btn"
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${c.emoji} ${wish.text}`)}&url=${encodeURIComponent((process.env.NEXT_PUBLIC_APP_URL ?? "") + `/w/${wish.id}`)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {d.share}
-            </a>
-          )}
         </div>
       </div>
+      {offered && wish.isPublic && (
+        <div className="card p-6 space-y-3">
+          <h2 className="font-semibold">{d.share}</h2>
+          <p className="text-sm text-[var(--muted)]">{d.shareLoop.hint}</p>
+          <ShareBar
+            wishId={wish.id}
+            shareUrl={shareUrl}
+            text={`${c.emoji} ${wish.text}`}
+            labels={{ share: d.shareLoop.native, copy: d.shareLoop.copy, copied: d.shareLoop.copied, download: d.shareLoop.download, x: "X", story: d.shareLoop.story, square: d.shareLoop.square }}
+          />
+        </div>
+      )}
     </div>
   );
 }

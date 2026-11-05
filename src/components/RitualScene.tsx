@@ -11,12 +11,39 @@ function rnd(seed: number) {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; count: number; hue: number }) {
+/**
+ * `labels` are the names of the most recent wishers, newest first. Each one is
+ * inscribed on a ritual object: the top stones of the cairn, the front plaques,
+ * the shiniest coins. Anonymous wishes leave their object blank.
+ */
+export function RitualScene({
+  visual,
+  count,
+  hue,
+  labels = [],
+}: {
+  visual: ChannelVisual;
+  count: number;
+  hue: number;
+  labels?: (string | null)[];
+}) {
   const n = Math.max(1, Math.min(count, 60));
   const r = rnd(n * 7919 + 17);
   const W = 640, H = 320;
   const accent = `hsl(${hue} 70% 60%)`;
   const accent2 = `hsl(${hue} 60% 45%)`;
+  const L = labels.slice(0, 24);
+  const short = (v: string | null | undefined, max = 8) => (v ? (v.length > max ? v.slice(0, max - 1) + "…" : v) : null);
+  /** Text inscribed on an object. `i` indexes newest-first. */
+  const Inscribe = ({ i, x, y, size = 9, fill = "#2a2118", max = 8, rotate = 0 }: { i: number; x: number; y: number; size?: number; fill?: string; max?: number; rotate?: number }) => {
+    const v = short(L[i], max);
+    if (!v) return null;
+    return (
+      <text x={x} y={y} fontSize={size} fontWeight={700} fill={fill} textAnchor="middle" dominantBaseline="middle" transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined} style={{ fontFamily: "inherit", pointerEvents: "none" }}>
+        {v}
+      </text>
+    );
+  };
 
   let body: React.ReactNode;
   switch (visual) {
@@ -28,7 +55,12 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
           {Array.from({ length: stones }, (_, i) => {
             const w = 150 - i * 6, h = 20 - i * 0.4;
             const x = W / 2 - w / 2 + (r() - 0.5) * 10, y = H - 32 - (i + 1) * h;
-            return <ellipse key={i} cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} fill={i % 2 ? "#6b5f52" : "#857668"} stroke="#3a3128" />;
+            return (
+              <g key={i}>
+                <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} fill={i % 2 ? "#6b5f52" : "#857668"} stroke="#3a3128" />
+                <Inscribe i={stones - 1 - i} x={x + w / 2} y={y + h / 2} size={10} fill="#f3efe6" max={10} />
+              </g>
+            );
           })}
         </g>
       );
@@ -46,9 +78,15 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
                 return (
                   <g key={c} className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s` }}>
                     <polygon points={`${x},${y + 8} ${x + 30},${y} ${x + 60},${y + 8} ${x + 60},${y + 55} ${x},${y + 55}`} fill="#c9a06a" stroke="#7a5a3a" />
-                    <line x1={x + 10} y1={y + 22} x2={x + 50} y2={y + 22} stroke="#7a5a3a" strokeWidth={1.5} />
-                    <line x1={x + 10} y1={y + 32} x2={x + 44} y2={y + 32} stroke="#7a5a3a" strokeWidth={1.5} />
-                    <line x1={x + 10} y1={y + 42} x2={x + 36} y2={y + 42} stroke="#7a5a3a" strokeWidth={1.5} />
+                    {L[row * cols + c] ? (
+                      <Inscribe i={row * cols + c} x={x + 30} y={y + 32} size={11} fill="#4a2f14" max={7} />
+                    ) : (
+                      <>
+                        <line x1={x + 10} y1={y + 22} x2={x + 50} y2={y + 22} stroke="#7a5a3a" strokeWidth={1.5} />
+                        <line x1={x + 10} y1={y + 32} x2={x + 44} y2={y + 32} stroke="#7a5a3a" strokeWidth={1.5} />
+                        <line x1={x + 10} y1={y + 42} x2={x + 36} y2={y + 42} stroke="#7a5a3a" strokeWidth={1.5} />
+                      </>
+                    )}
                   </g>
                 );
               })}
@@ -67,9 +105,16 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
           {Array.from({ length: 12 }, (_, i) => (
             <circle key={`d${i}`} cx={W / 2 + (i - 6) * 9} cy={60 - Math.abs(i - 6) * 3} r={3} fill="#9fd0ff" opacity={0.7} className="anim-float" style={{ animationDelay: `${i * 0.3}s` }} />
           ))}
-          {Array.from({ length: Math.min(n, 60) }, (_, i) => (
-            <ellipse key={i} cx={W / 2 + (r() - 0.5) * 440} cy={H - 60 + (r() - 0.5) * 60} rx={7} ry={4} fill={accent} stroke={accent2} />
-          ))}
+          {Array.from({ length: Math.min(n, 60) }, (_, i) => {
+            const cx = W / 2 + (r() - 0.5) * 440, cy = H - 60 + (r() - 0.5) * 60;
+            const named = !!L[i];
+            return (
+              <g key={i}>
+                <ellipse cx={cx} cy={cy} rx={named ? 16 : 7} ry={named ? 9 : 4} fill="#f0c860" stroke={accent2} />
+                <Inscribe i={i} x={cx} y={cy} size={7} fill="#5a3d0a" max={4} />
+              </g>
+            );
+          })}
         </g>
       );
       break;
@@ -86,6 +131,7 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
                 <path d="M-14,-30 L14,-30 L18,10 L-18,10 Z" fill="#ff9a3c" opacity={0.95} />
                 <rect x={-6} y={10} width={12} height={5} fill="#ffd27f" className="anim-flicker" />
                 <ellipse cx={0} cy={-8} rx={20} ry={28} fill="#ffb347" opacity={0.18} />
+                <Inscribe i={i} x={0} y={-8} size={9} fill="#5a2a00" max={6} />
               </g>
             );
           })}
@@ -104,7 +150,13 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
             const a = r() * Math.PI * 2, d = r() * 110;
             const x = W / 2 + Math.cos(a) * d, y = 130 + Math.sin(a) * d;
             const c = [`hsl(${hue} 80% 55%)`, "#ffd166", "#ef476f", "#f8f9fa"][i % 4];
-            return <path key={i} d={`M${x},${y} q4,12 0,24 q-4,12 2,22`} stroke={c} strokeWidth={4} fill="none" className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s` }} />;
+            return (
+              <g key={i} className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s` }}>
+                <path d={`M${x},${y} q4,12 0,24 q-4,12 2,22`} stroke={c} strokeWidth={4} fill="none" />
+                {L[i] && <rect x={x - 16} y={y + 20} width={32} height={11} rx={2} fill="#fff8e6" stroke="#7a5a3a" strokeWidth={0.5} />}
+                <Inscribe i={i} x={x} y={y + 26} size={7} fill="#4a2f14" max={6} />
+              </g>
+            );
           })}
         </g>
       );
@@ -122,7 +174,14 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
           {Array.from({ length: Math.min(n, 60) }, (_, i) => {
             const row = Math.floor(r() * 7), col = Math.floor(r() * 6);
             const off = row % 2 ? 50 : 0;
-            return <rect key={i} x={col * 110 - off + 100} y={row * 46 + 14} width={9} height={16} fill="#fdf6e3" stroke="#9c8a6a" transform={`rotate(${(r() - 0.5) * 30} ${col * 110 - off + 104} ${row * 46 + 22})`} />;
+            const nx = col * 110 - off + 100, ny = row * 46 + 14, rot = (r() - 0.5) * 30;
+            const named = !!L[i];
+            return (
+              <g key={i} transform={`rotate(${rot} ${nx + 4} ${ny + 8})`}>
+                <rect x={named ? nx - 10 : nx} y={ny} width={named ? 30 : 9} height={16} fill="#fdf6e3" stroke="#9c8a6a" />
+                <Inscribe i={i} x={nx + 5} y={ny + 8} size={6} fill="#6b5a3a" max={5} />
+              </g>
+            );
           })}
         </g>
       );
@@ -143,6 +202,7 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
                     <rect x={x} y={y - 34} width={14} height={34} fill="#f3e5c0" rx={2} />
                     <ellipse cx={x + 7} cy={y - 42} rx={4} ry={8} fill="#ffb84d" className="anim-flicker" style={{ animationDelay: `${(r() * 1.6).toFixed(2)}s` }} />
                     <ellipse cx={x + 7} cy={y - 42} rx={16} ry={22} fill="#ffb84d" opacity={0.08} />
+                    <Inscribe i={row * cols + c} x={x + 7} y={y + 16} size={7} fill="#d9c9a0" max={6} />
                   </g>
                 );
               })}
@@ -172,6 +232,7 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
                 {!isDiya && <circle cx={8} cy={-4} r={4} fill="#ffd166" />}
                 <ellipse cx={0} cy={-10} rx={3} ry={6} fill="#ffcf5c" className="anim-flicker" />
                 <ellipse cx={0} cy={12} rx={22} ry={6} fill="#ffcf5c" opacity={0.12} />
+                <Inscribe i={i} x={0} y={isDiya ? 3 : 2} size={6} fill="#fff" max={6} />
               </g>
             );
           })}
@@ -192,6 +253,7 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
               <g key={i} className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s`, transformOrigin: `${x}px 52px` }}>
                 <rect x={x} y={52} width={10} height={len} fill={c} stroke="#00000022" />
                 {[0.3, 0.55, 0.8].map((k) => <circle key={k} cx={x + 5} cy={52 + len * k} r={5} fill={c} stroke="#00000044" />)}
+                <Inscribe i={i} x={x + 5} y={52 + len * 0.15} size={7} fill={c === "#ffffff" || c === "#ffd166" ? "#333" : "#fff"} max={8} rotate={90} />
               </g>
             );
           })}
@@ -210,7 +272,13 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
               <path d={`M0,${70 + line * 90} Q${W / 2},${110 + line * 90} ${W},${70 + line * 90}`} stroke="#d9d0c0" strokeWidth={2} fill="none" />
               {Array.from({ length: Math.min(16, Math.max(0, n - line * 16)) }, (_, i) => {
                 const x = 20 + i * 38, yy = 70 + line * 90 + Math.sin((i / 16) * Math.PI) * 40;
-                return <path key={i} d={`M${x},${yy} h30 l-3,22 q-12,6 -24,0 z`} fill={cols[(i + line) % 5]} className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s`, transformOrigin: `${x + 15}px ${yy}px` }} />;
+                const idx = line * 16 + i;
+                return (
+                  <g key={i} className="anim-sway" style={{ animationDelay: `${(r() * 4).toFixed(2)}s`, transformOrigin: `${x + 15}px ${yy}px` }}>
+                    <path d={`M${x},${yy} h30 l-3,22 q-12,6 -24,0 z`} fill={cols[(i + line) % 5]} />
+                    <Inscribe i={idx} x={x + 15} y={yy + 11} size={7} fill={(i + line) % 5 === 1 || (i + line) % 5 === 4 ? "#333" : "#fff"} max={5} />
+                  </g>
+                );
               })}
             </g>
           ))}
@@ -229,7 +297,8 @@ export function RitualScene({ visual, count, hue }: { visual: ChannelVisual; cou
             return (
               <g key={i} className="anim-flicker" style={{ animationDelay: `${(r() * 2).toFixed(2)}s` }}>
                 <line x1={x} y1={y} x2={x - 60} y2={y + 30} stroke={accent} strokeWidth={2} opacity={0.6} />
-                <circle cx={x} cy={y} r={3} fill="#fff" />
+                <circle cx={x} cy={y} r={L[i] ? 4 : 3} fill="#fff" />
+                <Inscribe i={i} x={x} y={y - 10} size={8} fill="#e9e4ff" max={8} />
               </g>
             );
           })}

@@ -9,6 +9,8 @@ import { rateLimit, clientKey } from "@/lib/ratelimit";
 import { enabledProviders, getProvider } from "@/lib/payments";
 import { listOfferedWishes, settlePayment } from "@/lib/wishes";
 import { currentWallet, spendOneCredit, CREDIT_WISH_KRW } from "@/lib/credits";
+import { cookies } from "next/headers";
+import { VIA_COOKIE } from "@/middleware";
 
 export const runtime = "nodejs";
 
@@ -58,6 +60,10 @@ export async function POST(req: Request) {
   // Ensure channel row exists (seed normally does this; be forgiving).
   await prisma.channel.upsert({ where: { id: channel.id }, update: {}, create: { id: channel.id } });
 
+  // Share loop: credit the wish whose shared link brought this person here.
+  const viaRaw = (await cookies()).get(VIA_COOKIE)?.value;
+  const viaWishId = viaRaw && (await prisma.wish.findUnique({ where: { id: viaRaw }, select: { id: true } })) ? viaRaw : null;
+
   // --- Pay with a pre-purchased credit: no checkout, the wish is offered immediately.
   if (b.provider === "credits") {
     const wallet = await currentWallet();
@@ -73,6 +79,7 @@ export async function POST(req: Request) {
           amountKrw: CREDIT_WISH_KRW,
           status: "PENDING",
           walletId: wallet.id,
+          viaWishId,
         },
       });
       const ok = await spendOneCredit(tx, wallet.id, wish.id);
@@ -82,6 +89,7 @@ export async function POST(req: Request) {
         data: { wishId: wish.id, provider: "credits", providerRef: wallet.id, currency: "CREDIT", amount: "1", amountKrw: CREDIT_WISH_KRW, status: "PAID" },
       });
       await tx.channel.update({ where: { id: channel.id }, data: { wishCount: { increment: 1 } } });
+      if (viaWishId) await tx.wish.update({ where: { id: viaWishId }, data: { referrals: { increment: 1 } } });
       return wish;
     }).catch((e: Error) => (e.message === "insufficient_credits" ? null : Promise.reject(e)));
     if (!result) return NextResponse.json({ error: "insufficient_credits" }, { status: 402 });
@@ -104,6 +112,7 @@ export async function POST(req: Request) {
       isPublic: b.isPublic,
       amountKrw: b.amountKrw,
       status: "PENDING",
+      viaWishId,
       payment: {
         create: { provider: provider.id, currency: "KRW", amount: String(b.amountKrw), amountKrw: b.amountKrw },
       },

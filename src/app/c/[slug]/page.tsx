@@ -49,7 +49,7 @@ export default async function ChannelPage({ params }: { params: Promise<{ slug: 
       </div>
 
       <div className="card overflow-hidden">
-        <RitualScene visual={c.visual} count={count} hue={c.hue} />
+        <RitualScene visual={c.visual} count={count} hue={c.hue} labels={page.items.map((w) => w.author)} />
       </div>
 
       <p className="max-w-3xl text-[var(--muted)]">{c.description[locale]}</p>
