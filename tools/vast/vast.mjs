@@ -37,7 +37,7 @@ export async function offers({ minVram = 40, maxPrice = 0.9, minDisk = 80 } = {}
   const q = {
     verified: { eq: true }, rentable: { eq: true }, rented: { eq: false }, num_gpus: { eq: 1 },
     gpu_ram: { gte: minVram * 1024 }, disk_space: { gte: minDisk }, dph_total: { lte: maxPrice },
-    inet_down: { gte: 200 }, reliability2: { gte: 0.95 }, cuda_max_good: { gte: 12.1 },
+    inet_down: { gte: 200 }, reliability2: { gte: 0.95 }, cuda_max_good: { gte: 12.6 },
     order: [["dph_total", "asc"]], type: "on-demand", limit: 15,
   };
   const r = await vast("GET", `/bundles/?q=${encodeURIComponent(JSON.stringify(q))}`);
@@ -52,14 +52,24 @@ export async function rent(offerId, runId) {
     S3_PREFIX: `${PREFIX}/${runId}`, S3_STYLE: process.env.RELAY_S3_STYLE ?? "path",
   };
   return vast("PUT", `/asks/${offerId}/`, {
-    client_id: "me", image: "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime", disk: 80, label: `wish-cairn-assets-${runId}`,
+    client_id: "me", image: "pytorch/pytorch:2.7.1-cuda12.6-cudnn9-runtime", disk: 80, label: `wish-cairn-assets-${runId}`,
     onstart, runtype: "ssh", env, image_login: null,
   });
 }
 
+const RUN_FILE = path.join(ROOT, ".cache", "vast-run.json");
+const saveRun = (o) => { mkdirSync(path.dirname(RUN_FILE), { recursive: true }); writeFileSync(RUN_FILE, JSON.stringify(o)); };
+const loadRun = () => { try { return JSON.parse(readFileSync(RUN_FILE, "utf8")); } catch { return null; } };
+const brief = (i) => ({ id: i.id, status: i.actual_status, state: i.cur_state, msg: i.status_msg, gpu: i.gpu_name, price: +(i.dph_total ?? 0).toFixed(3), label: i.label, up: i.start_date ? Math.round((Date.now() / 1000 - i.start_date) / 60) + "m" : "" });
+/** The list endpoint is unreliable for fresh contracts; look the current run's instance up directly. */
 export async function instances() {
-  const r = await vast("GET", "/instances/");
-  return (r.instances ?? []).map((i) => ({ id: i.id, status: i.actual_status, state: i.cur_state, gpu: i.gpu_name, price: +(i.dph_total ?? 0).toFixed(3), label: i.label, up: i.start_date ? Math.round((Date.now() / 1000 - i.start_date) / 60) + "m" : "" }));
+  const r = await vast("GET", "/instances/").catch(() => ({}));
+  const list = (r.instances ?? []).map(brief);
+  const run = loadRun();
+  if (run?.instanceId && !list.some((i) => i.id === run.instanceId)) {
+    try { const one = await vast("GET", `/instances/${run.instanceId}/`); const i = one.instances ?? one; if (i?.id) list.push(brief(i)); } catch {}
+  }
+  return list;
 }
 export const destroy = (id) => vast("DELETE", `/instances/${id}/`);
 
@@ -102,7 +112,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === "offers24") show(await offers({ minVram: 22, maxPrice: 0.6 }));
   else if (cmd === "s3") console.log("s3 relay ok:", await s3Check());
   else if (cmd === "status") { show(await instances()); if (arg) show(await jobStatus(arg)); }
-  else if (cmd === "rent") { const runId = `r${Date.now().toString(36)}`; show({ runId, result: await rent(arg, runId) }); }
+  else if (cmd === "rent") { const runId = `r${Date.now().toString(36)}`; const result = await rent(arg, runId); if (result?.new_contract) saveRun({ runId, instanceId: result.new_contract, offerId: arg, at: Date.now() }); show({ runId, instanceId: result?.new_contract, success: result?.success }); }
   else if (cmd === "destroy") show(await destroy(arg));
   else if (cmd === "fetch") show(await fetchRun(arg));
   else if (cmd === "job") show(await jobStatus(arg));
