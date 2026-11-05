@@ -47,6 +47,27 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 - A $0.99 pack is the smallest amount that survives PayPal's fixed fee; a single ₩100 stone would not.
   Crypto (USDC on an L2) can be added as a third provider with the same `checkout → settleOrder` shape.
 
+## Virtual early users (seeding)
+
+An empty tower is the worst first impression. `tools/seed-users.mjs` creates virtual early users:
+personas across ten languages (Korean and English first), 40% anonymous, each with a mood and a topic,
+and asks Claude for the kind of wish a real person types in two seconds. Without API credentials it
+uses a built-in bank of wishes instead.
+
+```bash
+ADMIN_TOKEN=change-me node server.js                                           # the server needs the token
+node tools/seed-users.mjs preview --count 20                                   # look before you write
+ADMIN_TOKEN=change-me node tools/seed-users.mjs backfill --count 400 --days 14 # history, spread like real traffic
+ADMIN_TOKEN=change-me node tools/seed-users.mjs live --per-hour 6              # keeps stacking (run under pm2/systemd)
+```
+
+- Backfilled stones get past timestamps following a day/night curve across time zones; live stones land with
+  Poisson-ish gaps so they never look scheduled, and every viewer sees them fall.
+- Seeded stones are stored with `bot=1`. The public API never exposes it, but you can always separate them
+  (`SELECT COUNT(*) FROM stones WHERE bot=1`). The "here now" count only ever counts real open pages.
+- Model: `claude-opus-5-5` at low effort with the system prompt cached; a 25-wish batch costs well under a cent.
+- Taper `--per-hour` down as real users arrive, and say somewhere in your terms that the tower was seeded.
+
 ## Usability
 
 - Tap any stone to read its wish. **Recent wishes** drawer; tapping an entry flies the camera to that stone.
@@ -79,5 +100,6 @@ Keep sacred-site imagery stylized; the prompts avoid people, text and religious 
 server.js                 SQLite stones + wallets + orders · /api/me · GET/POST /api/stones · /api/buy · PayPal return · /pay/mock · /api/events (SSE) · static
 index.html                the 3D scene, UI, live updates (one file, ES modules via import map)
 tools/generate-assets.mjs generative asset pipeline → assets/manifest.json
+tools/seed-users.mjs      virtual early users: Claude-written wishes, backfill + live modes
 test.js                   validation, ordering, HTTP + SSE round-trip
 ```

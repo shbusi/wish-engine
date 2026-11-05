@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 process.env.DB_PATH = ":memory:";
 process.env.PAYMENT_PROVIDERS = "mock";
 process.env.RATE_PER_MIN = "100";
+process.env.ADMIN_TOKEN = "test-admin";
 const S = await import("./server.js");
 const { addStone, count, recent, after: afterId, createWallet, walletState, createOrder, settleOrder, server, STONE_CM, FREE_EVERY_MS, PACK } = S;
 
@@ -102,6 +103,21 @@ test("http: wallet cookie, post → sse → list, 402 when out of stones", async
   assert.equal(list.stones.at(-1).wish, "paid stone");
   const html = await fetch(`${base}/`).then((r) => r.text());
   assert.match(html, /Wish Cairn/);
+  // seeding: operator token required; backfilled stones don't broadcast, live ones do
+  const adminPost = (body, token) => fetch(`${base}/api/admin/stones`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "x-admin-token": token } : {}) }, body: JSON.stringify(body) });
+  assert.equal((await adminPost({ wish: "nope" })).status, 401);
+  assert.equal((await adminPost({ wish: "nope" }, "wrong")).status, 401);
+  const old = await adminPost({ name: "Yuki", wish: "合格しますように", createdAt: Date.now() - 3 * 86_400_000 }, "test-admin");
+  assert.equal(old.status, 201);
+  const liveSeed = await adminPost({ wish: "live seed" }, "test-admin");
+  assert.equal(liveSeed.status, 201);
+  for (let i = 0; i < 5 && !buf.includes("live seed"); i++) buf += dec.decode((await reader.read()).value);
+  assert.match(buf, /live seed/);
+  assert.doesNotMatch(buf, /合格しますように/, "backfilled stones are not broadcast");
+  assert.equal(S.botCount(), 2);
+  const pub = await fetch(`${base}/api/stones`).then((r) => r.json());
+  assert.equal("bot" in pub.stones.at(-1), false, "bot flag never leaves the server");
+
   const trav = await fetch(`${base}/vendor/three/../../server.js`);
   assert.notEqual(trav.status, 200);
   await reader.cancel();

@@ -54,8 +54,11 @@ db.exec(`
 `);
 try { db.exec("ALTER TABLE stones ADD COLUMN wallet_id INTEGER"); } catch {}
 try { db.exec("ALTER TABLE stones ADD COLUMN paid INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE stones ADD COLUMN bot INTEGER NOT NULL DEFAULT 0"); } catch {} // seeded by tools/seed-users.mjs; never exposed by the API
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, created_at) VALUES (?, ?, ?, ?, ?)"),
+  insertBot: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, bot, created_at) VALUES (?, ?, NULL, 0, 1, ?)"),
+  botCount: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE bot = 1"),
   recent: db.prepare("SELECT id, name, wish, created_at FROM stones ORDER BY id DESC LIMIT ?"),
   after: db.prepare("SELECT id, name, wish, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
@@ -77,6 +80,16 @@ export const count = () => q.count.get().n;
 export const recent = (n = 40) => q.recent.all(Math.min(Math.max(1, n), 200)).reverse();
 export const after = (id, n = 100) => q.after.all(Number(id) || 0, Math.min(n, 500));
 export const stoneById = (id) => q.one.get(Number(id) || 0);
+export const botCount = () => q.botCount.get().n;
+
+/** Seed stone (virtual early user). `createdAt` in the past = backfill; omitted = now. */
+export function addSeedStone({ name, wish, createdAt }) {
+  const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+  const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
+  if (cleanWish.length < 2) throw Object.assign(new Error("too_short"), { status: 400 });
+  const r = q.insertBot.run(cleanName || null, cleanWish, Number(createdAt) || Date.now());
+  return q.one.get(Number(r.lastInsertRowid));
+}
 
 // ---------- wallets ----------
 export function createWallet() {
@@ -254,6 +267,19 @@ export const server = http.createServer(async (req, res) => {
       } catch (e) {
         return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w), pack: PACK, providers: enabledProviders() }, setCookie ? { "Set-Cookie": setCookie } : {});
       }
+    }
+
+    // Operator-only: seed stones from tools/seed-users.mjs. Requires ADMIN_TOKEN.
+    if (req.method === "POST" && url.pathname === "/api/admin/stones") {
+      const token = process.env.ADMIN_TOKEN;
+      if (!token || req.headers["x-admin-token"] !== token) return json(res, 401, { error: "unauthorized" });
+      const body = await readBody(req);
+      try {
+        const stone = addSeedStone(body);
+        const live = !body.createdAt || Date.now() - Number(body.createdAt) < 60_000;
+        if (live) broadcast({ type: "stone", stone, ...stats() });
+        return json(res, 201, { stone, ...stats() });
+      } catch (e) { return json(res, e.status ?? 400, { error: e.message }); }
     }
 
     if (req.method === "POST" && url.pathname === "/api/buy") {
