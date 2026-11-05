@@ -382,7 +382,7 @@ const hiddenPile = (() => { // the stones you can't see become the mound the tow
     const n = Math.min(600, Math.max(count, top > 0.3 ? 40 : 0)); mesh.count = n; const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pz = new THREE.Vector3(), sc = new THREE.Vector3();
     for (let i = 0; i < n; i++) { const r = seeded(i + 1000); const a = r() * Math.PI * 2, s = 0.3 + r() * 0.32;
       const h = r() * Math.max(0, top - 0.1);                                    // how high up the pile this stone sits
-      const rad = (0.5 + r() * 0.5) * (1.2 + (1 - h / Math.max(top, 0.1)) * (1.4 + Math.log2(n + 1) * 0.3)); // narrower toward the top
+      const rad = Math.min(3.6, (0.5 + r() * 0.5) * (1.2 + (1 - h / Math.max(top, 0.1)) * (1.4 + Math.log2(n + 1) * 0.3))); // narrower toward the top, never near the camera
       pz.set(Math.cos(a) * rad, h + s * 0.3, Math.sin(a) * rad); q.setFromEuler(new THREE.Euler(r() * 0.5, r() * 6.28, r() * 0.5)); sc.setScalar(s); m.compose(pz, q, sc); mesh.setMatrixAt(i, m); }
     mesh.instanceMatrix.needsUpdate = true; mesh.visible = n > 0;
   } };
