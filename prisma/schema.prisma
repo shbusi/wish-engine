@@ -1,0 +1,63 @@
+// Wish Engine data model.
+// Dev: SQLite. Prod: switch provider to "postgresql" and set DATABASE_URL.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A ritual channel (Korean stone cairn, Japanese ema, Trevi fountain, ...)
+model Channel {
+  id          String   @id            // slug, e.g. "stone-cairn"
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  wishCount   Int      @default(0)    // denormalized counter of fulfilled (paid) wishes
+  createdAt   DateTime @default(now())
+  wishes      Wish[]
+}
+
+/// One wish. Created as PENDING at checkout, becomes OFFERED once payment is confirmed.
+model Wish {
+  id          String   @id @default(cuid())
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id])
+  text        String                  // the wish itself (max 280 chars)
+  author      String?                 // optional display name
+  locale      String   @default("en")
+  isPublic    Boolean  @default(true)
+  status      String   @default("PENDING") // PENDING | OFFERED | FAILED | REFUNDED
+  amountKrw   Int      @default(100)  // offering in KRW (base currency), min 100
+  offeredAt   DateTime?
+  createdAt   DateTime @default(now())
+  payment     Payment?
+
+  @@index([channelId, status, offeredAt])
+}
+
+/// Payment record, one per wish. Provider-agnostic.
+model Payment {
+  id            String   @id @default(cuid())
+  wishId        String   @unique
+  wish          Wish     @relation(fields: [wishId], references: [id])
+  provider      String                 // "paypal" | "crypto" | "mock"
+  providerRef   String?                // PayPal order id / crypto charge id
+  currency      String                 // charged currency, e.g. "USD", "USDC"
+  amount        String                 // charged amount as decimal string
+  amountKrw     Int                    // KRW equivalent at checkout
+  status        String   @default("CREATED") // CREATED | PAID | FAILED | REFUNDED
+  rawEvent      String?                // last webhook payload (JSON) for audit
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([provider, providerRef])
+}
+
+/// Idempotency log for webhooks.
+model WebhookEvent {
+  id          String   @id            // provider event id
+  provider    String
+  receivedAt  DateTime @default(now())
+}
