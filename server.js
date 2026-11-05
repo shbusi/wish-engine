@@ -60,8 +60,34 @@ function limited(ip) {
   return false;
 }
 
+// ---------- static files: Three.js from node_modules, generated assets from ./assets ----------
+const MIME = { ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".hdr": "application/octet-stream", ".glb": "model/gltf-binary", ".ktx2": "image/ktx2" };
+const STATIC = [
+  { prefix: "/vendor/three/", root: path.join(HERE, "node_modules", "three"), allow: /^(build|examples\/jsm)\// },
+  { prefix: "/assets/", root: path.join(HERE, "assets"), allow: /^[^.]/ },
+];
+function serveStatic(req, res, url) {
+  for (const s of STATIC) {
+    if (!url.pathname.startsWith(s.prefix)) continue;
+    const rel = path.posix.normalize(decodeURIComponent(url.pathname.slice(s.prefix.length)));
+    if (rel.startsWith("..") || rel.includes("\0") || !s.allow.test(rel)) { res.writeHead(403); return res.end(), true; }
+    const file = path.join(s.root, rel);
+    try {
+      const data = readFileSync(file);
+      res.writeHead(200, { "Content-Type": MIME[path.extname(file)] ?? "application/octet-stream", "Cache-Control": s.prefix === "/assets/" ? "public, max-age=3600" : "public, max-age=31536000, immutable" });
+      res.end(data);
+    } catch {
+      res.writeHead(404); res.end();
+    }
+    return true;
+  }
+  return false;
+}
+
 // ---------- http ----------
-const INDEX = readFileSync(path.join(HERE, "index.html"));
+const INDEX_PATH = path.join(HERE, "index.html");
+let indexCache = null;
+const index = () => (process.env.NODE_ENV === "production" ? (indexCache ??= readFileSync(INDEX_PATH)) : readFileSync(INDEX_PATH));
 const json = (res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
@@ -71,13 +97,16 @@ export const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress || "?";
 
+  if (req.method === "GET" && serveStatic(req, res, url)) return;
+
   if (req.method === "GET" && url.pathname === "/") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(INDEX);
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+    return res.end(index());
   }
 
   if (req.method === "GET" && url.pathname === "/api/stones") {
-    const a = url.searchParams.get("after");
+    const a = url.searchParams.get("after"), id = url.searchParams.get("id");
+    if (id) { const s = qOne.get(Number(id) || 0); return s ? json(res, 200, { stone: s }) : json(res, 404, { error: "not_found" }); }
     return json(res, 200, { total: count(), stones: a ? after(a) : recent(Number(url.searchParams.get("n") ?? 40)) });
   }
 

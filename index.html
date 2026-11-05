@@ -2,163 +2,526 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>소원 돌탑</title>
 <meta name="description" content="모두가 함께 쌓는 소원 돌탑. 돌 하나 올리고 소원을 빌어요.">
+<meta name="theme-color" content="#0b0b16">
 <style>
-  :root { --bg:#0b0a12; --fg:#f3efe6; --muted:#a39d90; --accent:#f0b35b; }
-  * { box-sizing: border-box; }
-  html, body { margin:0; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans KR", sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
-  h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px; }
-  .stats { display:flex; gap:16px; color:var(--muted); font-size:13px; margin-top:6px; }
-  .stats b { color: var(--accent); font-weight: 700; }
-  #sky { display:block; width:100%; height:auto; margin: 18px 0 10px; border-radius: 16px; background: radial-gradient(ellipse at 50% 85%, #2a2235 0%, #0b0a12 65%); }
-  form { display:grid; gap:8px; }
-  textarea, input { width:100%; background:#15131f; border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:12px; color:var(--fg); font: inherit; font-size:16px; }
-  textarea { min-height: 72px; resize: vertical; }
+  :root { --fg:#f3efe6; --muted:#b4ad9f; --accent:#f0b35b; --glass: rgba(14,13,24,.62); --line: rgba(255,255,255,.1); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:#0b0b16; color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans KR", sans-serif; overflow:hidden; }
+  #c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  .hud { position:fixed; left:0; right:0; pointer-events:none; padding: max(12px, env(safe-area-inset-top)) 16px 0; }
+  .hud > * { pointer-events:auto; }
+  .top { top:0; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .brand { background:var(--glass); backdrop-filter: blur(14px); border:1px solid var(--line); border-radius:14px; padding:8px 12px; }
+  .brand h1 { font-size:16px; margin:0; display:flex; align-items:center; gap:8px; }
+  .brand .stats { color:var(--muted); font-size:12px; margin-top:2px; display:flex; gap:10px; }
+  .brand .stats b { color:var(--accent); }
+  .iconbtn { background:var(--glass); backdrop-filter: blur(14px); border:1px solid var(--line); color:var(--fg); border-radius:12px; padding:9px 12px; font:inherit; font-size:14px; cursor:pointer; }
+  .iconbtn:hover { border-color: rgba(255,255,255,.25); }
+
+  .sheet { position:fixed; left:0; right:0; bottom:0; padding: 0 12px calc(12px + env(safe-area-inset-bottom)); }
+  .card { max-width:560px; margin:0 auto; background:var(--glass); backdrop-filter: blur(18px); border:1px solid var(--line); border-radius:18px; padding:12px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  textarea, input { width:100%; background:rgba(0,0,0,.35); border:1px solid var(--line); border-radius:12px; padding:11px 12px; color:var(--fg); font:inherit; font-size:16px; }
+  textarea { height:64px; resize:none; }
   textarea:focus, input:focus { outline:2px solid var(--accent); outline-offset:1px; }
-  .row { display:flex; gap:8px; }
-  button { flex-shrink:0; background:var(--accent); color:#1b1408; border:0; border-radius:999px; padding:0 22px; font:inherit; font-weight:700; font-size:16px; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
-  .hint { color:var(--muted); font-size:12px; min-height: 16px; }
-  ul { list-style:none; padding:0; margin: 24px 0 0; display:grid; gap:6px; }
-  li { background:#15131f; border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:10px 12px; font-size:15px; animation: fade .5s ease; }
-  li span { color:var(--muted); font-size:12px; margin-left:8px; }
-  @keyframes fade { from { opacity:0; transform: translateY(-4px);} }
-  @keyframes drop { 0% { transform: translateY(-260px); } 70% { transform: translateY(6px);} 85% { transform: translateY(-3px);} 100% { transform: translateY(0);} }
-  .drop { animation: drop .9s cubic-bezier(.2,.8,.3,1); }
-  text { font-family: inherit; font-weight: 700; pointer-events: none; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .btn { flex-shrink:0; background:var(--accent); color:#1b1408; border:0; border-radius:999px; padding:0 20px; font:inherit; font-weight:700; font-size:16px; cursor:pointer; min-height:44px; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .btn.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  .hint { color:var(--muted); font-size:12px; min-height:16px; margin-top:6px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .after { display:none; gap:8px; margin-top:8px; }
+  .after.show { display:flex; }
+  .after .btn { flex:1; }
+
+  #feed { position:fixed; top:0; right:0; bottom:0; width:min(360px, 92vw); background:var(--glass); backdrop-filter: blur(18px); border-left:1px solid var(--line); transform:translateX(100%); transition: transform .25s ease; padding: max(12px, env(safe-area-inset-top)) 12px 12px; overflow:auto; }
+  #feed.open { transform:none; }
+  #feed h2 { font-size:14px; margin:4px 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  #feed ul { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+  #feed li { background:rgba(0,0,0,.3); border:1px solid var(--line); border-radius:12px; padding:9px 11px; font-size:14px; cursor:pointer; animation: fade .4s ease; }
+  #feed li:hover { border-color: rgba(255,255,255,.3); }
+  #feed li span { color:var(--muted); font-size:12px; margin-left:6px; }
+  @keyframes fade { from { opacity:0; transform:translateY(-4px); } }
+
+  #tip { position:fixed; pointer-events:none; transform:translate(-50%, calc(-100% - 14px)); background:rgba(14,13,24,.9); border:1px solid var(--line); border-radius:12px; padding:9px 12px; max-width:260px; font-size:14px; opacity:0; transition:opacity .15s; }
+  #tip.show { opacity:1; }
+  #tip small { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+  #tip:after { content:""; position:absolute; left:50%; bottom:-6px; width:10px; height:10px; background:rgba(14,13,24,.9); border-right:1px solid var(--line); border-bottom:1px solid var(--line); transform:translateX(-50%) rotate(45deg); }
+
+  #loading { position:fixed; inset:0; display:grid; place-items:center; background:#0b0b16; color:var(--muted); font-size:14px; transition: opacity .6s; z-index:10; }
+  #loading.gone { opacity:0; pointer-events:none; }
+  .toast { position:fixed; left:50%; top:max(70px, env(safe-area-inset-top)); transform:translateX(-50%); background:rgba(14,13,24,.85); border:1px solid var(--line); border-radius:999px; padding:8px 14px; font-size:13px; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.show { opacity:1; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
 </head>
 <body>
-<main>
-  <h1>🪨 소원 돌탑 <small data-i18n="sub">모두가 함께 쌓는 탑</small></h1>
-  <div class="stats">
-    <span><b id="total">0</b> <span data-i18n="stones">개의 돌</span></span>
-    <span><b id="watching">1</b> <span data-i18n="watching">명이 보고 있어요</span></span>
-  </div>
+<canvas id="c" aria-label="소원 돌탑 3D 장면"></canvas>
+<div id="loading">돌탑을 불러오는 중…</div>
 
-  <svg id="sky" viewBox="0 0 560 420" role="img" aria-label="stone cairn"></svg>
-
-  <form id="f">
-    <textarea id="wish" maxlength="140" required placeholder="이루어지길 바라는 것을 적어주세요" data-i18n-ph="wishPh"></textarea>
-    <div class="row">
-      <input id="name" maxlength="20" placeholder="이름 (선택)" data-i18n-ph="namePh">
-      <button id="btn" type="submit" data-i18n="stack">돌 올리기</button>
+<div class="hud top">
+  <div class="brand">
+    <h1>🪨 소원 돌탑</h1>
+    <div class="stats">
+      <span><b id="total">0</b> <span data-i18n="stones">개의 돌</span></span>
+      <span><b id="watching">1</b> <span data-i18n="watching">명이 함께</span></span>
     </div>
-    <div class="hint" id="hint"></div>
+  </div>
+  <button class="iconbtn" id="feedBtn" data-i18n="recent">최근 소원</button>
+</div>
+
+<aside id="feed" aria-label="recent wishes">
+  <h2><span data-i18n="recent">최근 소원</span> <button class="iconbtn" id="feedClose" aria-label="close">✕</button></h2>
+  <ul id="feedList"></ul>
+</aside>
+
+<div id="tip" role="status"></div>
+<div class="toast" id="toast"></div>
+
+<div class="sheet">
+  <form class="card" id="f">
+    <textarea id="wish" maxlength="140" required placeholder="이루어지길 바라는 것을 적어주세요" data-i18n-ph="wishPh" aria-label="wish"></textarea>
+    <div class="row">
+      <input id="name" maxlength="20" placeholder="이름 (선택) · 돌에 새겨져요" data-i18n-ph="namePh" aria-label="name">
+      <button class="btn" id="btn" type="submit" data-i18n="stack">돌 올리기</button>
+    </div>
+    <div class="hint"><span id="hint"></span><span id="len">0/140</span></div>
+    <div class="after" id="after">
+      <button type="button" class="btn ghost" id="mine" data-i18n="mine">내 돌 보기</button>
+      <button type="button" class="btn ghost" id="share" data-i18n="share">링크 공유</button>
+    </div>
   </form>
+</div>
 
-  <ul id="feed"></ul>
-</main>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ImprovedNoise } from "three/addons/math/ImprovedNoise.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-<script>
+// ================================================================== i18n
 const T = {
-  ko: { sub:"모두가 함께 쌓는 탑", stones:"개의 돌", watching:"명이 보고 있어요", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택)", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 당신의 소원은 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명" },
-  en: { sub:"one tower, stacked by everyone", stones:"stones", watching:"watching now", wishPh:"What do you hope for?", namePh:"Name (optional)", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower. Your wish is part of it now.", short:"Your wish is too short.", rate:"Please wait a moment before stacking again.", err:"Something went wrong. Please try again.", anon:"anonymous" },
+  ko: { stones:"개의 돌", watching:"명이 함께", recent:"최근 소원", wishPh:"이루어지길 바라는 것을 적어주세요", namePh:"이름 (선택) · 돌에 새겨져요", stack:"돌 올리기", stacking:"올리는 중…", done:"돌이 올라갔어요. 이제 탑의 일부예요.", short:"소원이 너무 짧아요.", rate:"잠시 후 다시 올려주세요.", err:"문제가 생겼어요. 다시 시도해주세요.", anon:"익명", mine:"내 돌 보기", share:"링크 공유", copied:"링크를 복사했어요", landed:(n)=>`${n}님의 돌이 올라왔어요`, landedAnon:"누군가의 돌이 올라왔어요", hidden:(n)=>`아래에 ${n.toLocaleString()}개의 돌이 더 있어요` },
+  en: { stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
 };
 const L = (navigator.language || "en").startsWith("ko") ? "ko" : "en";
-const t = (k) => T[L][k];
+const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
 document.documentElement.lang = L;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
-// ---------- the tower ----------
-const svg = document.getElementById("sky");
-const W = 560, H = 420, VISIBLE = 16;   // stones drawn on screen; older ones become the base
-let stones = [];                         // oldest → newest
-let total = 0;
-let lastId = 0;
-const seed = (id) => { let s = (id * 9301 + 49297) % 233280; return () => (s = (s * 9301 + 49297) % 233280) / 233280; };
-const colors = ["#857668", "#6b5f52", "#9a8b7a", "#7a6d5e", "#8c7f70"];
+// ================================================================== renderer
+const isMobile = matchMedia("(max-width: 700px)").matches;
+const canvas = $("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.5 : 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0c0b16, 0.028);
+const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 400);
+camera.position.set(0, 6, 12);
 
-function render(newId) {
-  const vis = stones.slice(-VISIBLE);
-  const hidden = total - vis.length;
-  let y = H - 36;
-  let out = `<rect x="0" y="${H - 30}" width="${W}" height="30" fill="#2a2419"/>`;
-  if (hidden > 0) { // base mound for the stones you can't see
-    const h = Math.min(90, 18 + Math.log2(hidden + 1) * 10);
-    out += `<path d="M${W/2-190},${H-30} Q${W/2},${H-30-h*2} ${W/2+190},${H-30} Z" fill="#3a3128"/>`;
-    out += `<text x="${W/2}" y="${H-30-h*0.35}" font-size="11" fill="#a39d90" text-anchor="middle" font-weight="400">+${hidden.toLocaleString()}</text>`;
-    y = H - 30 - h * 0.95;
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 4; controls.maxDistance = 22;
+controls.minPolarAngle = 0.75; controls.maxPolarAngle = 1.48;
+controls.enablePan = false;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
+let idleTimer; const wake = () => { controls.autoRotate = false; clearTimeout(idleTimer); idleTimer = setTimeout(() => (controls.autoRotate = true), 9000); };
+canvas.addEventListener("pointerdown", wake); canvas.addEventListener("wheel", wake, { passive: true });
+
+// ================================================================== sky, moon, stars, environment
+const noise = new ImprovedNoise();
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { top: { value: new THREE.Color(0x04050e) }, mid: { value: new THREE.Color(0x101436) }, bot: { value: new THREE.Color(0x2a2036) }, moonDir: { value: new THREE.Vector3(-0.55, 0.3, -0.78).normalize() } },
+  vertexShader: `varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position,1.)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform vec3 top, mid, bot, moonDir; varying vec3 vW;
+    void main(){ vec3 d = normalize(vW); float h = d.y;
+      vec3 c = mix(bot, mid, smoothstep(-0.05, 0.25, h)); c = mix(c, top, smoothstep(0.2, 0.9, h));
+      float m = max(dot(d, moonDir), 0.); c += vec3(0.95,0.85,0.7) * (pow(m, 400.) * 1.2 + pow(m, 24.) * 0.06);
+      gl_FragColor = vec4(c, 1.); }`,
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), skyMat));
+{ // stars
+  const n = 2200, pos = new Float32Array(n * 3), sz = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const v = new THREE.Vector3().randomDirection(); if (v.y < 0.02) v.y = Math.abs(v.y) + 0.02; v.multiplyScalar(280); pos.set([v.x, v.y, v.z], i * 3); sz[i] = Math.random(); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("sz", new THREE.BufferAttribute(sz, 1));
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    uniforms: { time: { value: 0 } },
+    vertexShader: `attribute float sz; uniform float time; varying float a; void main(){ a = 0.5 + 0.5 * sin(time * (0.6 + sz * 2.) + sz * 40.); gl_PointSize = (0.9 + sz * sz * 2.2) * ${(isMobile ? 1.2 : 1.6).toFixed(1)}; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `varying float a; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; gl_FragColor = vec4(vec3(0.92, 0.95, 1.0) * 0.9, a * (1. - d * 2.)); }` });
+  const stars = new THREE.Points(g, m); stars.name = "stars"; scene.add(stars);
+}
+{ // moon sprite
+  const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d");
+  const gr = x.createRadialGradient(128, 128, 20, 128, 128, 128); gr.addColorStop(0, "rgba(255,246,225,1)"); gr.addColorStop(0.22, "rgba(255,240,210,.95)"); gr.addColorStop(0.26, "rgba(255,230,190,.18)"); gr.addColorStop(0.6, "rgba(255,220,170,.04)"); gr.addColorStop(1, "rgba(255,220,170,0)");
+  x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, blending: THREE.AdditiveBlending, fog: false, depthWrite: false }));
+  sp.position.copy(skyMat.uniforms.moonDir.value).multiplyScalar(240); sp.scale.setScalar(22); scene.add(sp);
+}
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new THREE.Scene().add(new THREE.Mesh(new THREE.SphereGeometry(50, 16, 8), skyMat.clone())), 0.02).texture;
+scene.environmentIntensity = 0.8;
+
+// ================================================================== lights
+scene.add(new THREE.HemisphereLight(0x4a5a90, 0x1a1410, 0.9));
+const moon = new THREE.DirectionalLight(0xcfdcff, 2.4);
+moon.position.set(-12, 18, 9); moon.castShadow = true; // key light: moon-ish, from front-left so faces read
+moon.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048); moon.shadow.camera.near = 1; moon.shadow.camera.far = 70;
+moon.shadow.camera.left = moon.shadow.camera.bottom = -14; moon.shadow.camera.right = moon.shadow.camera.top = 14; moon.shadow.bias = -0.0008; moon.shadow.radius = 3;
+scene.add(moon);
+const lantern = new THREE.PointLight(0xffa64d, 90, 26, 2);
+lantern.position.set(3.2, 2.4, 2.8); lantern.castShadow = !isMobile; lantern.shadow.mapSize.set(512, 512); lantern.shadow.bias = -0.002;
+scene.add(lantern);
+{ // the lantern itself: a small warm glass on a post
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 2.4, 10), new THREE.MeshStandardMaterial({ color: 0x3b2a1c, roughness: 0.9 }));
+  post.position.set(3.2, 1.2, 2.8); post.castShadow = true; scene.add(post);
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffc27a, emissive: 0xffa040, emissiveIntensity: 4, roughness: 0.3 }));
+  glass.position.set(3.2, 2.4, 2.8); scene.add(glass);
+}
+
+// ================================================================== textures (procedural, replaced by generated assets when present)
+function makeStoneTexture(size = 512, seed = 1) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d");
+  const img = x.createImageData(size, size), d = img.data;
+  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+    const u = i / size * 6, v = j / size * 6;
+    const n1 = noise.noise(u + seed * 7, v, seed) * 0.5 + 0.5, n2 = noise.noise(u * 4, v * 4, seed + 3) * 0.5 + 0.5, n3 = noise.noise(u * 16, v * 16, seed + 9) * 0.5 + 0.5;
+    const vein = Math.pow(Math.abs(noise.noise(u * 1.5, v * 1.5, seed + 20)), 0.35);
+    let l = 0.52 + (n1 - 0.5) * 0.22 + (n2 - 0.5) * 0.12 + (n3 - 0.5) * 0.08 - vein * 0.08;
+    const warm = 0.06 * n1;
+    const k = (j * size + i) * 4; d[k] = 255 * (l + warm * 0.6); d[k + 1] = 255 * (l + warm * 0.25); d[k + 2] = 255 * (l - warm * 0.3); d[k + 3] = 255;
   }
-  vis.forEach((s, i) => {
-    const r = seed(s.id);
-    const w = 150 - i * 6 + (r() - .5) * 14, h = 22 - i * .4;
-    const x = W / 2 + (r() - .5) * 14;
-    y -= h - 2;
-    const name = s.name ? (s.name.length > 10 ? s.name.slice(0, 9) + "…" : s.name) : "";
-    out += `<g class="${s.id === newId ? "drop" : ""}">
-      <ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="${colors[s.id % colors.length]}" stroke="#3a3128"/>
-      ${name ? `<text x="${x}" y="${y}" font-size="11" fill="#f3efe6" text-anchor="middle" dominant-baseline="middle">${esc(name)}</text>` : ""}
-    </g>`;
+  x.putImageData(img, 0, 0);
+  const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tx;
+}
+function makeGroundTexture(size = 512) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d");
+  const img = x.createImageData(size, size), d = img.data;
+  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+    const u = i / size * 8, v = j / size * 8;
+    const m = noise.noise(u, v, 50) * 0.5 + 0.5, f = noise.noise(u * 6, v * 6, 60) * 0.5 + 0.5, g = noise.noise(u * 24, v * 24, 70) * 0.5 + 0.5;
+    const moss = Math.pow(m, 1.6);
+    const k = (j * size + i) * 4;
+    d[k] = 255 * (0.22 + f * 0.1 + (1 - moss) * 0.08); d[k + 1] = 255 * (0.24 + moss * 0.18 + g * 0.06); d[k + 2] = 255 * (0.15 + f * 0.05); d[k + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(10, 10); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8;
+  return tx;
+}
+const stoneTex = makeStoneTexture(512, 1);
+const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: stoneTex, bumpScale: 0.5, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.7 });
+
+// ================================================================== ground + far hills
+{
+  const g = new THREE.CircleGeometry(90, 160);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i); const r = Math.hypot(x, y);
+    const hills = r > 9 ? Math.pow((r - 9) / 60, 1.4) * (6 + 4 * noise.noise(x * 0.06, y * 0.06, 1)) : 0;
+    const bumps = 0.08 * noise.noise(x * 0.8, y * 0.8, 2) + 0.03 * noise.noise(x * 3, y * 3, 3);
+    p.setZ(i, hills + bumps);
+  }
+  g.computeVertexNormals();
+  const ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: makeGroundTexture(), roughness: 1, metalness: 0, envMapIntensity: 0.3 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+}
+
+// ================================================================== fireflies + dust
+const fireflies = (() => {
+  const n = isMobile ? 70 : 140, pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  for (let i = 0; i < n; i++) { pos.set([(Math.random() - .5) * 18, 0.3 + Math.random() * 4, (Math.random() - .5) * 18], i * 3); seed[i] = Math.random() * 100; }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("seed", new THREE.BufferAttribute(seed, 1));
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { time: { value: 0 } },
+    vertexShader: `attribute float seed; uniform float time; varying float a; void main(){ vec3 p = position; p.x += sin(time*.4+seed)*.6; p.y += sin(time*.7+seed*1.3)*.35; p.z += cos(time*.5+seed)*.6; a = .35 + .65 * pow(.5 + .5 * sin(time*1.7+seed*3.), 3.); vec4 mv = modelViewMatrix * vec4(p,1.); gl_PointSize = (3. + a * 4.) * ${(isMobile ? 2.0 : 2.6).toFixed(1)} * (10. / -mv.z); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `varying float a; void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; gl_FragColor = vec4(1., .78, .4, a * (1. - d * 2.)); }` });
+  const pts = new THREE.Points(g, m); scene.add(pts); return pts;
+})();
+const dust = (() => {
+  const n = 60, pos = new Float32Array(n * 3), vel = [];
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ color: 0xcdbfa8, size: 0.08, transparent: true, opacity: 0, depthWrite: false });
+  const pts = new THREE.Points(g, m); scene.add(pts);
+  let life = 0;
+  return {
+    burst(at, r) { life = 1; for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, s = 0.6 + Math.random() * 1.4; pos.set([at.x + Math.cos(a) * r * 0.6, at.y, at.z + Math.sin(a) * r * 0.6], i * 3); vel[i] = [Math.cos(a) * s, 0.6 + Math.random() * 0.8, Math.sin(a) * s]; } g.attributes.position.needsUpdate = true; },
+    tick(dt) { if (life <= 0) return; life -= dt * 1.4; m.opacity = Math.max(0, life) * 0.8; for (let i = 0; i < n; i++) { const v = vel[i]; v[1] -= 3 * dt; pos[i * 3] += v[0] * dt; pos[i * 3 + 1] += v[1] * dt; pos[i * 3 + 2] += v[2] * dt; } g.attributes.position.needsUpdate = true; },
+  };
+})();
+
+// ================================================================== stones
+const VISIBLE = isMobile ? 16 : 20;
+const stones = [];           // oldest → newest, each { data, mesh, rx, ry, rz, label }
+const byId = new Map();
+let total = 0, lastId = 0, mine = null;
+let stoneGeoBase = null;     // generated GLB geometry when available
+const seeded = (id) => { let s = (id * 9301 + 49297) % 233280; return () => (s = (s * 9301 + 49297) % 233280) / 233280; };
+
+function stoneGeometry(id, s) {
+  const r = seeded(id * 7 + 3);
+  const rx = s * (0.95 + r() * 0.25), ry = s * (0.22 + r() * 0.1), rz = s * (0.74 + r() * 0.22);
+  let g;
+  if (stoneGeoBase) { g = stoneGeoBase.clone(); }
+  else {
+    g = new THREE.IcosahedronGeometry(1, isMobile ? 4 : 5);
+    const p = g.attributes.position, v = new THREE.Vector3(), off = r() * 100;
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const n1 = noise.noise(v.x * 1.6 + off, v.y * 1.6, v.z * 1.6), n2 = noise.noise(v.x * 5 + off, v.y * 5, v.z * 5);
+      v.multiplyScalar(1 + n1 * 0.16 + n2 * 0.045);
+      v.y = Math.sign(v.y) * Math.pow(Math.abs(v.y), 0.72); // rounded rim, flat-ish top and bottom, like a river stone
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+  }
+  g.scale(rx, ry, rz); g.computeVertexNormals();
+  return { g, rx, ry, rz };
+}
+function labelTexture(name) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 160; const x = c.getContext("2d");
+  x.clearRect(0, 0, 512, 160);
+  x.font = `700 ${name.length > 8 ? 54 : 68}px ui-sans-serif, system-ui, "Noto Sans KR", sans-serif`; x.textAlign = "center"; x.textBaseline = "middle";
+  x.shadowColor = "rgba(0,0,0,.9)"; x.shadowBlur = 6; x.shadowOffsetY = 2;
+  x.fillStyle = "rgba(246,238,220,0.96)"; x.fillText(name, 256, 84);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+}
+function layoutIndex(i, n) { return i - (n - 1); } // 0 = top stone, negative below
+
+/** Rebuild stone meshes from the visible window. Positions are deterministic per id so everyone sees the same tower. */
+function buildStone(data, idx) {
+  const r = seeded(data.id);
+  const s = 1.45 - Math.max(0, idx) * 0.028 + (r() - .5) * 0.18;
+  const { g, rx, ry, rz } = stoneGeometry(data.id, Math.max(0.55, s));
+  const mat = stoneMat.clone(); mat.color.setHSL(0.08 + r() * 0.04, 0.08 + r() * 0.1, 0.62 + r() * 0.16); mat.map = stoneTex;
+  const mesh = new THREE.Mesh(g, mat); mesh.castShadow = mesh.receiveShadow = true;
+  mesh.rotation.y = r() * Math.PI * 2; mesh.rotation.z = (r() - .5) * 0.08; mesh.rotation.x = (r() - .5) * 0.06;
+  mesh.userData.id = data.id;
+  const st = { data, mesh, rx, ry, rz, ox: (r() - .5) * 0.26, oz: (r() - .5) * 0.26, label: null };
+  if (data.name) {
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(rx * 1.25, rx * 0.39), new THREE.MeshBasicMaterial({ map: labelTexture(data.name), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    lab.renderOrder = 2; st.label = lab; scene.add(lab);
+  }
+  scene.add(mesh);
+  return st;
+}
+/** Stack positions bottom→top. */
+function relayout() {
+  let y = 0.02;
+  stones.forEach((st, i) => {
+    y += st.ry;
+    st.targetY = y; st.mesh.position.set(st.ox, st.falling ? st.mesh.position.y : y, st.oz);
+    y += st.ry - 0.05;
   });
-  svg.innerHTML = out;
-  document.getElementById("total").textContent = total.toLocaleString();
+  towerTop = y;
 }
-const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+let towerTop = 0;
 
-// ---------- feed ----------
-const feed = document.getElementById("feed");
-function addToFeed(s, top = true) {
-  const li = document.createElement("li");
-  li.innerHTML = `${esc(s.wish)}<span>— ${esc(s.name || t("anon"))}</span>`;
-  top ? feed.prepend(li) : feed.append(li);
-  while (feed.children.length > 30) feed.lastChild.remove();
+const hiddenPile = (() => { // the stones you can't see become the mound the tower stands on
+  const g = new THREE.IcosahedronGeometry(1, 2);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); v.multiplyScalar(1 + noise.noise(v.x * 2, v.y * 2, v.z * 2) * 0.2); p.setXYZ(i, v.x, v.y * 0.45, v.z); }
+  g.computeVertexNormals();
+  const mesh = new THREE.InstancedMesh(g, stoneMat, 600); mesh.count = 0; mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
+  return { mesh, set(count) {
+    const n = Math.min(600, count); mesh.count = n; const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pz = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (let i = 0; i < n; i++) { const r = seeded(i + 1000); const a = r() * Math.PI * 2, rad = 1.1 + Math.pow(r(), 0.6) * (2.2 + Math.log2(n + 1) * 0.35), s = 0.28 + r() * 0.3;
+      pz.set(Math.cos(a) * rad, s * 0.35 + Math.max(0, 0.55 - rad * 0.14), Math.sin(a) * rad); q.setFromEuler(new THREE.Euler(r() * 0.5, r() * 6.28, r() * 0.5)); sc.setScalar(s); m.compose(pz, q, sc); mesh.setMatrixAt(i, m); }
+    mesh.instanceMatrix.needsUpdate = true; mesh.visible = n > 0;
+  } };
+})();
+
+function setStones(list, totalCount) {
+  for (const st of stones) { scene.remove(st.mesh); st.mesh.geometry.dispose(); if (st.label) scene.remove(st.label); }
+  stones.length = 0; byId.clear();
+  const vis = list.slice(-VISIBLE);
+  vis.forEach((d, i) => { const st = buildStone(d, layoutIndex(i, vis.length) * -1); stones.push(st); byId.set(d.id, st); });
+  lastId = list.at(-1)?.id ?? 0; total = totalCount;
+  relayout(); hiddenPile.set(total - vis.length); updateHud();
+}
+function addStone(d, animate) {
+  if (byId.has(d.id) || d.id <= lastId) return;
+  lastId = d.id; total = Math.max(total, d.id ? total + 1 : total);
+  const st = buildStone(d, 0); stones.push(st); byId.set(d.id, st);
+  while (stones.length > VISIBLE) { const old = stones.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); if (old.label) scene.remove(old.label); byId.delete(old.data.id); }
+  relayout(); hiddenPile.set(total - stones.length);
+  if (animate) { st.falling = true; st.vy = 0; st.mesh.position.y = st.targetY + 7; st.mesh.scale.set(1, 1, 1); }
+  // older stones in the window are re-indexed; recompute their size subtly is skipped to keep them stable.
+  updateHud(); addToFeed(d);
+  return st;
+}
+function updateHud() { $("total").textContent = total.toLocaleString(); }
+
+// ================================================================== animation loop
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), isMobile ? 0.45 : 0.6, 0.55, 0.82); composer.addPass(bloom);
+composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null }, k: { value: 0.42 } }, vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position,1.); }`, fragmentShader: `uniform sampler2D tDiffuse; uniform float k; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); float d = distance(vUv, vec2(.5)); c.rgb *= 1. - smoothstep(.45, .95, d) * k; gl_FragColor = c; }` }));
+composer.addPass(new OutputPass());
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener("resize", resize); resize();
+
+const clock = new THREE.Clock();
+const camTarget = new THREE.Vector3(0, 2, 0);
+let focusStone = null, focusT = 0;
+const tmpV = new THREE.Vector3();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  // physics for falling stones
+  for (const st of stones) {
+    if (st.falling) {
+      st.vy -= 22 * dt; st.mesh.position.y += st.vy * dt;
+      if (st.mesh.position.y <= st.targetY) {
+        st.mesh.position.y = st.targetY;
+        if (st.vy < -3.5) { st.vy = -st.vy * 0.22; dust.burst(st.mesh.position, st.rx); st.squash = 1; }
+        else { st.falling = false; st.vy = 0; st.squash = Math.max(st.squash ?? 0, 0.5); }
+      }
+    }
+    if (st.squash > 0) { st.squash -= dt * 3.2; const q = Math.max(0, st.squash); st.mesh.scale.set(1 + q * 0.16, 1 - q * 0.22, 1 + q * 0.16); }
+    if (st.label) { // engraved name on the side facing the camera, sitting just outside the stone's surface
+      tmpV.subVectors(camera.position, st.mesh.position); tmpV.y = 0; tmpV.normalize();
+      const th = Math.atan2(tmpV.z, tmpV.x) - st.mesh.rotation.y;
+      const rad = (st.rx * st.rz) / Math.hypot(st.rz * Math.cos(th), st.rx * Math.sin(th)) * 1.1 + 0.03;
+      st.label.position.copy(st.mesh.position).addScaledVector(tmpV, rad);
+      st.label.position.y += st.ry * 0.05;
+      st.label.lookAt(camera.position.x, st.label.position.y, camera.position.z);
+    }
+    if (st.glow) { st.glow -= dt * 0.5; const g = Math.max(0, st.glow); st.mesh.material.emissive.setRGB(1, 0.62, 0.28).multiplyScalar(g * 0.16 * (0.6 + 0.4 * Math.sin(time * 5))); }
+  }
+  dust.tick(dt);
+  fireflies.material.uniforms.time.value = time; scene.getObjectByName("stars").material.uniforms.time.value = time;
+  lantern.intensity = 86 + Math.sin(time * 9.3) * 5 + Math.sin(time * 23.7) * 3;
+  // camera target follows the tower top (or a focused stone)
+  const wantY = focusStone ? focusStone.mesh.position.y : Math.max(1.8, towerTop - 2.4);
+  camTarget.lerp(new THREE.Vector3(0, wantY, 0), 1 - Math.pow(0.001, dt));
+  controls.target.copy(camTarget);
+  if (focusT > 0) { focusT -= dt; const want = focusStone ? Math.max(4.5, focusStone.rx * 6) : 12; const d = camera.position.distanceTo(controls.target); if (Math.abs(d - want) > 0.05) { camera.position.sub(controls.target).multiplyScalar(1 + (want - d) / d * (1 - Math.pow(0.02, dt))).add(controls.target); } }
+  controls.update();
+  composer.render();
+  if (tipFor) placeTip();
+  requestAnimationFrame(tick);
 }
 
-function take(s, animate) {
-  if (s.id <= lastId) return;
-  lastId = s.id;
-  stones.push(s);
-  if (stones.length > 200) stones.shift();
-  addToFeed(s);
-}
+// ================================================================== interaction: tap a stone to read its wish
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let tipFor = null, downAt = null;
+canvas.addEventListener("pointerdown", (e) => (downAt = [e.clientX, e.clientY]));
+canvas.addEventListener("pointerup", (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  ptr.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(stones.map((s) => s.mesh), false)[0];
+  if (hit) showTip(byId.get(hit.object.userData.id)); else hideTip();
+});
+function showTip(st) { tipFor = st; $("tip").innerHTML = `${esc(st.data.wish)}<small>— ${esc(st.data.name || t("anon"))}</small>`; $("tip").classList.add("show"); placeTip(); }
+function hideTip() { tipFor = null; $("tip").classList.remove("show"); }
+function placeTip() { tmpV.copy(tipFor.mesh.position).y += tipFor.ry; tmpV.project(camera); $("tip").style.left = `${(tmpV.x + 1) / 2 * innerWidth}px`; $("tip").style.top = `${(1 - tmpV.y) / 2 * innerHeight}px`; }
+function focusOn(st) { if (!st) return; focusStone = st; focusT = 2.2; st.glow = 2.5; wake(); setTimeout(() => { if (focusStone === st) focusStone = null; }, 6000); showTip(st); }
 
-// ---------- load + live ----------
+// ================================================================== feed
+const feedList = $("feedList");
+function addToFeed(d, top = true) {
+  const li = document.createElement("li"); li.innerHTML = `${esc(d.wish)}<span>— ${esc(d.name || t("anon"))}</span>`; li.dataset.id = d.id;
+  li.addEventListener("click", () => { const st = byId.get(d.id); if (st) focusOn(st); else toast(t("hidden", total - stones.length)); });
+  top ? feedList.prepend(li) : feedList.append(li); while (feedList.children.length > 40) feedList.lastChild.remove();
+}
+$("feedBtn").addEventListener("click", () => $("feed").classList.toggle("open"));
+$("feedClose").addEventListener("click", () => $("feed").classList.remove("open"));
+let toastT; function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 2600); }
+
+// ================================================================== data + live
 async function load() {
-  const r = await fetch("/api/stones?n=40").then((r) => r.json());
-  total = r.total;
-  stones = [];
-  for (const s of r.stones) take(s);
-  render();
+  const r = await fetch(`/api/stones?n=${VISIBLE}`).then((r) => r.json());
+  setStones(r.stones, r.total);
+  feedList.innerHTML = ""; [...r.stones].reverse().forEach((d) => addToFeed(d, false));
 }
 function live() {
   const es = new EventSource("/api/events");
   es.onmessage = (m) => {
     const e = JSON.parse(m.data);
-    if (e.type === "stone") { total = e.total; take(e.stone); render(e.stone.id); }
-    if (e.type === "presence" || e.type === "hello") document.getElementById("watching").textContent = e.watching;
+    if (e.type === "stone") { if (!byId.has(e.stone.id)) { addStone(e.stone, true); total = e.total; updateHud(); toast(e.stone.name ? t("landed", e.stone.name) : t("landedAnon")); } else { total = e.total; updateHud(); } }
+    if (e.type === "presence" || e.type === "hello") $("watching").textContent = e.watching;
     if (e.type === "hello" && e.total !== total) load();
   };
-  es.onerror = () => setTimeout(load, 3000); // EventSource reconnects on its own; resync counts
 }
 
-// ---------- stacking ----------
-const form = document.getElementById("f"), btn = document.getElementById("btn"), hint = document.getElementById("hint");
+// ================================================================== form
+const form = $("f"), btn = $("btn"), hint = $("hint"), wishEl = $("wish"), nameEl = $("name");
+wishEl.addEventListener("input", () => ($("len").textContent = `${wishEl.value.length}/140`));
+wishEl.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const wish = document.getElementById("wish").value.trim(), name = document.getElementById("name").value.trim();
+  const wish = wishEl.value.trim(), name = nameEl.value.trim();
   if (wish.length < 2) return (hint.textContent = t("short"));
   btn.disabled = true; btn.textContent = t("stacking"); hint.textContent = "";
   try {
     const r = await fetch("/api/stones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wish, name }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error);
-    total = j.total; take(j.stone); render(j.stone.id);   // the SSE echo is ignored by id
-    document.getElementById("wish").value = "";
-    hint.textContent = t("done");
-    try { localStorage.setItem("cairn_name", name); } catch {}
-  } catch (e) {
-    hint.textContent = e.message === "rate_limited" ? t("rate") : e.message === "too_short" ? t("short") : t("err");
-  } finally { btn.disabled = false; btn.textContent = t("stack"); }
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    // The SSE echo can land before this response; either way we end up with the same stone.
+    const st = addStone(j.stone, true) ?? byId.get(j.stone.id); total = j.total; updateHud();
+    mine = j.stone; st.glow = 3; focusStone = null; wake();
+    wishEl.value = ""; $("len").textContent = "0/140"; hint.textContent = t("done"); $("after").classList.add("show");
+    history.replaceState(null, "", `?s=${j.stone.id}`);
+    try { localStorage.setItem("cairn_name", name); localStorage.setItem("cairn_mine", String(j.stone.id)); } catch {}
+    wishEl.blur();
+  } catch (e) { console.error("stack failed", e); hint.textContent = e.message === "rate_limited" ? t("rate") : e.message === "too_short" ? t("short") : t("err"); }
+  finally { btn.disabled = false; btn.textContent = t("stack"); }
 });
-try { document.getElementById("name").value = localStorage.getItem("cairn_name") || ""; } catch {}
+$("mine").addEventListener("click", () => { const st = mine && byId.get(mine.id); if (st) focusOn(st); else toast(t("hidden", total - stones.length)); });
+$("share").addEventListener("click", async () => {
+  const url = `${location.origin}/?s=${mine?.id ?? ""}`;
+  if (navigator.share) { try { await navigator.share({ title: "소원 돌탑", text: mine?.wish, url }); return; } catch {} }
+  try { await navigator.clipboard.writeText(url); toast(t("copied")); } catch {}
+});
+try { nameEl.value = localStorage.getItem("cairn_name") || ""; } catch {}
 
-load().then(live);
+// ================================================================== optional generated assets (skybox / stone texture / stone mesh)
+async function loadAssets() {
+  try {
+    const m = await fetch("/assets/manifest.json").then((r) => r.json());
+    const tl = new THREE.TextureLoader();
+    if (m.skybox) {
+      const sky = await tl.loadAsync(m.skybox); sky.mapping = THREE.EquirectangularReflectionMapping; sky.colorSpace = THREE.SRGBColorSpace;
+      scene.background = sky; scene.environment = pmrem.fromEquirectangular(sky).texture; scene.backgroundIntensity = 0.9;
+    }
+    if (m.stone?.albedo) {
+      const a = await tl.loadAsync(m.stone.albedo); a.wrapS = a.wrapT = THREE.RepeatWrapping; a.colorSpace = THREE.SRGBColorSpace; a.anisotropy = 8;
+      stoneMat.map = a; stoneMat.bumpMap = a; stoneMat.bumpScale = 0.9; stoneMat.needsUpdate = true;
+      if (m.stone.normal) { const n = await tl.loadAsync(m.stone.normal); n.wrapS = n.wrapT = THREE.RepeatWrapping; stoneMat.normalMap = n; stoneMat.bumpMap = null; }
+      if (m.stone.roughness) { const r = await tl.loadAsync(m.stone.roughness); r.wrapS = r.wrapT = THREE.RepeatWrapping; stoneMat.roughnessMap = r; }
+      for (const st of stones) { st.mesh.material.map = stoneMat.map; st.mesh.material.bumpMap = stoneMat.bumpMap; st.mesh.material.normalMap = stoneMat.normalMap; st.mesh.material.roughnessMap = stoneMat.roughnessMap; st.mesh.material.needsUpdate = true; }
+    }
+    if (m.stone?.model) {
+      const gltf = await new GLTFLoader().loadAsync(m.stone.model); let geo = null;
+      gltf.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
+      if (geo) { geo = geo.clone(); geo.computeBoundingBox(); const b = geo.boundingBox, c = new THREE.Vector3(); b.getCenter(c); geo.translate(-c.x, -c.y, -c.z); const s = b.getSize(new THREE.Vector3()); geo.scale(2 / s.x, 2 / s.y, 2 / s.z); stoneGeoBase = geo; await load(); }
+    }
+  } catch {}
+}
+
+// ================================================================== go
+await load();
+live();
+$("loading").classList.add("gone");
+tick();
+loadAssets();
+{ // deep link ?s=<id>: find that stone
+  const s = Number(new URLSearchParams(location.search).get("s"));
+  if (s) { const st = byId.get(s); if (st) setTimeout(() => focusOn(st), 600); else fetch(`/api/stones?id=${s}`).then((r) => r.ok ? r.json() : null).then((j) => j && toast(`“${j.stone.wish}” — ${t("hidden", total - stones.length)}`)); }
+  try { const m = Number(localStorage.getItem("cairn_mine")); if (m) { mine = { id: m }; $("after").classList.add("show"); } } catch {}
+}
 </script>
 </body>
 </html>

@@ -4,9 +4,14 @@
   "private": true,
   "description": "소원 돌탑 — everyone stacks one stone on the same tower.",
   "type": "module",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node --no-warnings server.js",
     "test": "node --no-warnings --test test.js"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
   }
 }

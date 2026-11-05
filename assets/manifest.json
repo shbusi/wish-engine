@@ -1,0 +1,5 @@
+{
+  "_comment": "Filled by `node tools/generate-assets.mjs`. Any missing key falls back to the procedural look in index.html.",
+  "skybox": null,
+  "stone": { "albedo": null, "normal": null, "roughness": null, "model": null }
+}
