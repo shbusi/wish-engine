@@ -19,6 +19,8 @@ const APP_URL = () => process.env.APP_URL ?? `http://localhost:${PORT}`;
 
 export const STONE_CM = Number(process.env.STONE_CM ?? 9);          // how much one stone lifts the tower
 export const FREE_EVERY_MS = Number(process.env.FREE_EVERY_HOURS ?? 24) * 3_600_000;
+// Template placeholders ("<fill me>", "0x...", "<기부처 이름>") pasted into the host's variables count as unset, so they never show on a page or crash a parser.
+for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && (/^\s*<.*>\s*$/.test(v) || /^0x\.{2,}$/.test(v.trim()))) { delete process.env[k]; console.warn(`${k} holds a placeholder; treated as unset`); }
 export const PACK = { stones: Number(process.env.PACK_STONES ?? 10), usd: process.env.PACK_PRICE_USD ?? "0.99" };
 export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3);
 // The firmament: when the tower reaches FIRMAMENT_M metres, everyone who has placed a stone receives FIRMAMENT_REWARD
