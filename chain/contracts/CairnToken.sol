@@ -5,7 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 
-/// @title CAIRN — the Wish Cairn token.
+/// @title The Wish Cairn token (name and symbol are set at deployment; the placeholder is DOL).
 /// @notice Fixed supply, minted once at deployment to the allocation wallets. No owner, no minting, no pausing.
 ///         Burnable so the buyback pool can retire tokens bought with stone revenue.
 contract CairnToken is ERC20, ERC20Burnable, ERC20Permit {
@@ -17,9 +17,9 @@ contract CairnToken is ERC20, ERC20Burnable, ERC20Permit {
     uint16 public constant TREASURY_BPS = 1500;  // 15% — treasury
     uint16 public constant LIQUIDITY_BPS = 500;  // 5%  — DEX liquidity
 
-    constructor(address community, address sale, address team, address treasury, address liquidity)
-        ERC20("Cairn", "CAIRN")
-        ERC20Permit("Cairn")
+    constructor(string memory name_, string memory symbol_, address community, address sale, address team, address treasury, address liquidity)
+        ERC20(name_, symbol_)
+        ERC20Permit(name_)
     {
         require(community != address(0) && sale != address(0) && team != address(0) && treasury != address(0) && liquidity != address(0), "zero address");
         _mint(community, TOTAL_SUPPLY * COMMUNITY_BPS / 10_000);

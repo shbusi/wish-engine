@@ -6,7 +6,7 @@
 <title>Wish Cairn · For investors</title>
 <meta name="description" content="One tower of wishes the whole world stacks. Every stone sold pays its stakers in stablecoins. Live numbers, token structure, contracts.">
 <meta property="og:title" content="Wish Cairn · For investors">
-<meta property="og:description" content="Every stone sold pays CAIRN stakers in the stablecoin it was bought with. Live metrics and verifiable contracts.">
+<meta property="og:description" content="Every stone sold pays token stakers in the stablecoin it was bought with. Live metrics and verifiable contracts.">
 <style>
   :root { --bg:#0b0b16; --fg:#f3efe6; --muted:#b4ad9f; --accent:#f0b35b; --good:#9fe0b0; --glass: rgba(20,19,30,.9); --line: rgba(255,255,255,.1); }
   * { box-sizing:border-box; }
@@ -70,7 +70,7 @@
     <p class="muted" data-i18n="howNote">Investors are paid from revenue, not from a buyback or a promise. When stone sales rise, distributions rise the same day. Revenue is distributed per stablecoin, so there is no conversion loss. Web payments (PayPal) are converted to USDC by the operator and deposited into the same pool.</p>
   </div>
 
-  <h2 data-i18n="tokenTitle">The CAIRN token</h2>
+  <h2 data-i18n="tokenTitle" id="tokenTitle">The CAIRN token</h2>
   <div class="card">
     <p data-i18n="tokenLead">Fixed supply of 1,000,000,000 CAIRN, minted once at deployment. No mint function, no owner, no pause, no blacklist, no transfer tax.</p>
     <div class="alloc"><i style="width:40%;background:#f0b35b"></i><i style="width:25%;background:#9fe0b0"></i><i style="width:15%;background:#8fb3ff"></i><i style="width:15%;background:#d49cff"></i><i style="width:5%;background:#ff9c9c"></i></div>
@@ -79,7 +79,7 @@
     <ul id="util"></ul>
   </div>
 
-  <h2 data-i18n="saleTitle">Public sale</h2>
+  <h2 data-i18n="saleTitle" id="saleTitle">Public sale</h2>
   <div class="card">
     <table id="saleTable"></table>
     <p class="muted" id="saleLive"></p>
@@ -127,6 +127,7 @@ const T = {
     contractNames:{ stoneCairn:"StoneCairn (stone NFTs, payments, split)", revenueShare:"RevenueShare (staking, distributions)", token:"CairnToken (ERC-20)", sale:"CairnSale (public sale)", vesting:"VestingWallet (team, 24 months)", treasury:"Treasury" },
     planTitle:"Plan",
     plan:["Testnet rehearsal on Base Sepolia: full flow with mock stablecoins (now).","Four weeks of real usage data before any sale: daily stones, return rate, free → paid conversion.","External audit of CairnSale and RevenueShare; treasury moved to a Safe multisig.","Base mainnet deployment with USDC and EURC; other stablecoins added as they are issued on Base.","Public sale opens only after the metrics above are public for a month."],
+    placeholderNote:"DOL is a working name. The final token name is still being chosen and will be announced before the sale.", stonesOnly:"Stage 1 is live: stones are on-chain and all revenue goes to the treasury. The token, staking and sale deploy in stage 2.",
     riskTitle:"Risks, plainly",
     risks:["This is early. Visitor numbers are small and may stay small.","Contracts are not yet audited. No mainnet sale happens before an audit.","Token value depends on stone revenue. If people stop stacking, distributions stop.","Regulation of token sales differs by country and may restrict who can participate."],
     footer:"Numbers on this page update every minute. This page is an overview of a product and its contracts, not investment advice.",
@@ -151,6 +152,7 @@ const T = {
     contractNames:{ stoneCairn:"StoneCairn (돌 NFT, 결제, 분배)", revenueShare:"RevenueShare (스테이킹, 분배)", token:"CairnToken (ERC-20)", sale:"CairnSale (공개 세일)", vesting:"VestingWallet (팀, 24개월)", treasury:"트레저리" },
     planTitle:"계획",
     plan:["Base Sepolia 테스트넷 리허설: 모의 스테이블코인으로 전체 흐름 (지금).","세일 전 최소 4주의 실사용 데이터: 일일 돌 수, 재방문율, 무료→유료 전환.","CairnSale·RevenueShare 외부 감사. 트레저리를 Safe 멀티시그로.","Base 메인넷 배포 (USDC·EURC). 다른 스테이블코인은 Base 발행에 맞춰 추가.","위 지표가 한 달간 공개된 뒤에만 공개 세일을 엽니다."],
+    placeholderNote:"DOL은 임시 이름입니다. 정식 토큰 이름은 아직 정하는 중이며 세일 전에 공개합니다.", stonesOnly:"1단계가 돌아가고 있습니다. 돌은 온체인이고 매출은 전부 트레저리로 갑니다. 토큰·스테이킹·세일은 2단계에서 배포됩니다.",
     riskTitle:"리스크, 있는 그대로",
     risks:["초기 단계입니다. 방문자 수가 적고, 계속 적을 수 있습니다.","컨트랙트는 아직 감사 전입니다. 감사 전엔 메인넷 세일이 없습니다.","토큰 가치는 돌 매출에 달려 있습니다. 사람들이 돌을 안 쌓으면 분배도 멈춥니다.","토큰 세일 규제는 나라마다 다르고 참여가 제한될 수 있습니다."],
     footer:"이 페이지의 숫자는 1분마다 갱신됩니다. 제품과 컨트랙트에 대한 개요이며 투자 조언이 아닙니다.",
@@ -158,7 +160,8 @@ const T = {
 };
 const { pickLang, setLang, langHref } = await import("/i18n.js");
 const L = pickLang(["en", "ko"]);
-const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
+var SYM = "DOL"; // replaced by the deployed token symbol once /api/metrics arrives; "CAIRN" in the copy is the placeholder
+const t = (k, ...a) => { let v = T[L][k]; if (typeof v === "function") v = v(...a); return typeof v === "string" ? v.replaceAll("CAIRN", SYM) : Array.isArray(v) ? v.map((x) => typeof x === "string" ? x.replaceAll("CAIRN", SYM) : Array.isArray(x) ? x.map((y) => typeof y === "string" ? y.replaceAll("CAIRN", SYM) : y) : x) : v; };
 document.documentElement.lang = L;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 const $ = (id) => document.getElementById(id);
@@ -182,6 +185,10 @@ $("saleTable").innerHTML = t("saleRows", "0.02", "250,000", "2,000,000", "25,000
 // live: server metrics
 const m = await fetch("/api/metrics").then((r) => r.json());
 const cfg = m.chain, tot = m.totals;
+SYM = cfg?.symbol ?? "DOL"; document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+$("alloc").innerHTML = t("alloc").map(([n, p, d]) => `<tr><th>${n}</th><td class="n"><b>${p}</b></td><td class="muted">${d}</td></tr>`).join(""); $("util").innerHTML = t("util").map((x) => `<li>${x}</li>`).join("");
+if (!cfg?.tokenName || /^dol$/i.test(cfg.tokenName)) { const n = document.createElement("p"); n.className = "muted"; n.textContent = t("placeholderNote"); $("tokenTitle").after(n); }
+if (cfg && !cfg.token) { const n = document.createElement("p"); n.className = "muted"; n.textContent = t("stonesOnly"); $("saleTitle").after(n); }
 $("height").textContent = `${fmt(m.towerStones * m.stoneCm / 100, 2)} m`; $("towerStones").textContent = t("stonesN", m.towerStones);
 const last7 = m.days.slice(-7).reduce((a, d) => a + d.stones, 0);
 $("stones7").textContent = fmt(last7); $("stonesAll").textContent = t("allTime", tot.stones);
@@ -207,10 +214,10 @@ else {
   try {
     const { ethers } = await import("/vendor/ethers/dist/ethers.min.js");
     const ro = new ethers.JsonRpcProvider(cfg.rpcUrl, cfg.chainId, { staticNetwork: true });
-    const share = new ethers.Contract(cfg.revenueShare, cfg.shareAbi, ro);
     const parts = [];
-    for (const s of cfg.stables) { const d = await share.distributed(s.address); if (d > 0n) parts.push(`${fmt(ethers.formatUnits(d, s.decimals), 2)} ${s.symbol}`); }
-    $("distributed").textContent = t("distributed", parts.length ? parts.join(" · ") : "0");
+    if (cfg.revenueShare) { const share = new ethers.Contract(cfg.revenueShare, cfg.shareAbi, ro); for (const s of cfg.stables) { const d = await share.distributed(s.address); if (d > 0n) parts.push(`${fmt(ethers.formatUnits(d, s.decimals), 2)} ${s.symbol}`); } }
+    $("distributed").textContent = cfg.revenueShare ? t("distributed", parts.length ? parts.join(" · ") : "0") : t("saleState").none;
+    if (!cfg.sale) $("saleLive").textContent = t("saleState").none;
     if (cfg.sale) {
       const sale = new ethers.Contract(cfg.sale, ["function price() view returns (uint256)", "function softCap() view returns (uint256)", "function hardCap() view returns (uint256)", "function maxPerWallet() view returns (uint256)", "function start() view returns (uint64)", "function end() view returns (uint64)", "function raised() view returns (uint256)", "function finalized() view returns (bool)", "function refunding() view returns (bool)", "function isOpen() view returns (bool)"], ro);
       const [price, soft, hard, maxW, start, end, raised, finalized, refunding, open] = await Promise.all([sale.price(), sale.softCap(), sale.hardCap(), sale.maxPerWallet(), sale.start(), sale.end(), sale.raised(), sale.finalized(), sale.refunding(), sale.isOpen()]);

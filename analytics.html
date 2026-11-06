@@ -84,7 +84,8 @@ const T = {
 };
 const { pickLang, setLang, langHref } = await import("/i18n.js");
 const qs = new URLSearchParams(location.search), L = pickLang(["en", "ko"]);
-const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
+var SYM = "DOL";
+const t = (k, ...a) => { let v = T[L][k]; if (typeof v === "function") v = v(...a); if (v && typeof v === "object" && !Array.isArray(v)) v = Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, typeof vv === "string" ? vv.replaceAll("CAIRN", SYM) : vv])); return typeof v === "string" ? v.replaceAll("CAIRN", SYM) : v; };
 document.documentElement.lang = L; document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 const $ = (id) => document.getElementById(id);
 $("langSwap").textContent = L === "ko" ? "English" : "한국어"; $("langSwap").addEventListener("click", (e) => { e.preventDefault(); setLang(L === "ko" ? "en" : "ko"); });
@@ -155,8 +156,10 @@ function render() {
   renderChain(a);
 }
 async function renderChain(a) {
+  SYM = a.chain?.symbol ?? "DOL";
   const cfg = a.chain, C = t("chain"), el = $("chain");
   if (!cfg) { el.innerHTML = `<div class="tile"><div class="k">${C.none}</div></div>`; return; }
+  if (!cfg.revenueShare) { el.innerHTML = `<div class="tile"><div class="k">${C.onchain}</div><div class="v">${fmt(a.totals.onchain)}</div></div>`; return; }
   el.innerHTML = `<div class="tile"><div class="k">${C.onchain}</div><div class="v">${fmt(a.totals.onchain)}</div></div>`;
   try {
     const { ethers } = await import("/vendor/ethers/dist/ethers.min.js");

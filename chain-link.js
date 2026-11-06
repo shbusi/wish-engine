@@ -38,7 +38,7 @@ export const chain = () => cfg;
 /** What the page needs: addresses, chain id, rpc, price. Never the signer key. */
 export function chainPublic() {
   if (!cfg) return null;
-  return { network: cfg.network, chainId: cfg.chainId, chainName: cfg.chainName, explorer: cfg.explorer, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, revenueShare: cfg.revenueShare, revenueBps: cfg.revenueBps, stables: cfg.stables ?? [{ symbol: "USDC", address: cfg.usdc, decimals: 6, price: cfg.stonePrice }], token: cfg.token, sale: cfg.sale, vesting: cfg.vesting, treasury: cfg.treasury, abi: ABI, shareAbi: SHARE_ABI, erc20Abi: ERC20_ABI };
+  return { network: cfg.network, chainId: cfg.chainId, chainName: cfg.chainName, explorer: cfg.explorer, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, revenueShare: cfg.revenueShare, revenueBps: cfg.revenueBps, stables: cfg.stables ?? [{ symbol: "USDC", address: cfg.usdc, decimals: 6, price: cfg.stonePrice }], token: cfg.token ?? null, sale: cfg.sale ?? null, vesting: cfg.vesting ?? null, treasury: cfg.treasury, symbol: cfg.tokenSymbol ?? "DOL", tokenName: cfg.tokenName ?? null, stage: cfg.stage ?? "all", abi: ABI, shareAbi: SHARE_ABI, erc20Abi: ERC20_ABI };
 }
 
 /** keccak256(wish|salt): the chain sees the hash, the server keeps the text. */

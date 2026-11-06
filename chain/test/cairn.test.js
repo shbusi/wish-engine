@@ -8,7 +8,7 @@ const CAIRN = (n) => ethers.parseUnits(String(n), 18);
 describe("CairnToken", () => {
   it("mints the whole supply to the five allocations and nothing else", async () => {
     const [community, sale, team, treasury, liquidity] = await ethers.getSigners();
-    const token = await ethers.deployContract("CairnToken", [community.address, sale.address, team.address, treasury.address, liquidity.address]);
+    const token = await ethers.deployContract("CairnToken", ["Dol", "DOL", community.address, sale.address, team.address, treasury.address, liquidity.address]);
     const total = await token.TOTAL_SUPPLY();
     expect(await token.totalSupply()).to.equal(total);
     expect(await token.balanceOf(community.address)).to.equal(total * 4000n / 10000n);
@@ -30,7 +30,7 @@ describe("StoneCairn + RevenueShare", () => {
     usdc = await ethers.deployContract("MockStable", ["USD Coin", "USDC", 6]);
     eurc = await ethers.deployContract("MockStable", ["Euro Coin", "EURC", 6]);
     jpyc = await ethers.deployContract("MockStable", ["JPY Coin", "JPYC", 18]);
-    token = await ethers.deployContract("CairnToken", [owner.address, owner.address, owner.address, treasury.address, owner.address]);
+    token = await ethers.deployContract("CairnToken", ["Dol", "DOL", owner.address, owner.address, owner.address, treasury.address, owner.address]);
     share = await ethers.deployContract("RevenueShare", [await token.getAddress(), owner.address]);
     cairn = await ethers.deployContract("StoneCairn", [await usdc.getAddress(), PRICE_USDC, treasury.address, await share.getAddress(), 5000, signer.address, owner.address]);
     await share.setNotifier(await cairn.getAddress(), true);
@@ -161,7 +161,7 @@ describe("CairnSale", () => {
   beforeEach(async () => {
     [owner, treasury, alice, bob] = await ethers.getSigners();
     usdc = await ethers.deployContract("MockStable", ["USD Coin", "USDC", 6]);
-    token = await ethers.deployContract("CairnToken", [owner.address, owner.address, owner.address, treasury.address, owner.address]);
+    token = await ethers.deployContract("CairnToken", ["Dol", "DOL", owner.address, owner.address, owner.address, treasury.address, owner.address]);
     start = (await time.latest()) + 100; end = start + 86400;
     sale = await ethers.deployContract("CairnSale", [await token.getAddress(), await usdc.getAddress(), PRICE, SOFT, HARD, MAX, start, end, treasury.address, owner.address]);
     await token.transfer(await sale.getAddress(), CAIRN(250_000_000));
@@ -222,7 +222,7 @@ describe("Team vesting (OpenZeppelin VestingWallet)", () => {
     const [owner, team] = await ethers.getSigners();
     const start = (await time.latest()) + 10, duration = 730 * 86400;
     const vest = await ethers.deployContract("VestingWallet", [team.address, start, duration]);
-    const token = await ethers.deployContract("CairnToken", [owner.address, owner.address, await vest.getAddress(), owner.address, owner.address]);
+    const token = await ethers.deployContract("CairnToken", ["Dol", "DOL", owner.address, owner.address, await vest.getAddress(), owner.address, owner.address]);
     const total = CAIRN(150_000_000);
     await time.increaseTo(start + duration / 2);
     await vest["release(address)"](await token.getAddress());
@@ -230,5 +230,25 @@ describe("Team vesting (OpenZeppelin VestingWallet)", () => {
     await time.increaseTo(start + duration + 1);
     await vest["release(address)"](await token.getAddress());
     expect(await token.balanceOf(team.address)).to.equal(total);
+  });
+});
+
+describe("Two-stage launch: stones first, token later", function () {
+  it("runs with all revenue to the treasury, then setSplit routes a share to a new RevenueShare", async function () {
+    const [owner, treasury, signer, user] = await ethers.getSigners();
+    const usdc = await ethers.deployContract("MockStable", ["USDC", "USDC", 6]);
+    const cairn = await ethers.deployContract("StoneCairn", [await usdc.getAddress(), 100000n, treasury.address, ethers.ZeroAddress, 5000, signer.address, owner.address]);
+    expect(await cairn.revenueBps()).to.equal(0); // no sink → no split, whatever bps was asked
+    await usdc.mint(user.address, 1_000_000n); await usdc.connect(user).approve(await cairn.getAddress(), ethers.MaxUint256);
+    await cairn.connect(user).stackWith(await usdc.getAddress(), ethers.ZeroHash, "first");
+    expect(await usdc.balanceOf(treasury.address)).to.equal(100000n);
+    // later: the token and the revenue share exist; route half of every stone to stakers
+    const token = await ethers.deployContract("CairnToken", ["Dol", "DOL", owner.address, owner.address, owner.address, treasury.address, owner.address]);
+    const share = await ethers.deployContract("RevenueShare", [await token.getAddress(), owner.address]);
+    await cairn.setSplit(treasury.address, await share.getAddress(), 5000); await share.setNotifier(await cairn.getAddress(), true);
+    await cairn.connect(user).stackWith(await usdc.getAddress(), ethers.ZeroHash, "second");
+    expect(await usdc.balanceOf(treasury.address)).to.equal(150000n);
+    expect(await usdc.balanceOf(await share.getAddress())).to.equal(50000n);
+    expect(await token.name()).to.equal("Dol"); expect(await token.symbol()).to.equal("DOL");
   });
 });

@@ -39,44 +39,64 @@ async function main() {
   const maxPerWallet = BigInt(env("MAX_PER_WALLET_USDC", String(25_000e6)));
   const start = Math.floor(new Date(env("SALE_START", new Date(Date.now() + 86_400_000).toISOString())).getTime() / 1000);
   const end = start + Number(env("SALE_DAYS", 14)) * 86400;
-  console.log(`network ${network.name} · deployer ${deployer.address}`);
+  const tokenName = env("TOKEN_NAME", "Dol"), tokenSymbol = env("TOKEN_SYMBOL", "DOL"); // placeholder until the real name is chosen
+  // STAGE=stones  → only StoneCairn, 100% of revenue to the treasury (run the product for real before the token exists)
+  // STAGE=token   → token + vesting + RevenueShare + sale, then route REVENUE_BPS of the existing StoneCairn to stakers
+  // STAGE=all     → everything at once (default; what the testnet rehearsal does)
+  const stage = env("STAGE", "all");
+  const prevFile = `deployments/${network.name}.json`, prev = fs.existsSync(prevFile) ? JSON.parse(fs.readFileSync(prevFile, "utf8")) : null;
+  console.log(`network ${network.name} · deployer ${deployer.address} · stage ${stage}`);
 
   // Stablecoins
-  let stables = process.env.STABLES ? JSON.parse(process.env.STABLES) : network.name === "base" ? BASE_STABLES : TEST_STABLES;
+  let stables = process.env.STABLES ? JSON.parse(process.env.STABLES) : stage === "token" && prev?.stables ? prev.stables : network.name === "base" ? BASE_STABLES : TEST_STABLES;
   for (const s of stables) {
     if (!s.address) { const m = await ethers.deployContract("MockStable", [`${s.symbol} (mock)`, s.symbol, s.decimals]); await m.waitForDeployment(); s.address = await m.getAddress(); s.mock = true; console.log(`Mock ${s.symbol}`, s.address); }
   }
   const usdc = stables[0];
 
-  const vest = await ethers.deployContract("VestingWallet", [team, Math.floor(Date.now() / 1000), 730 * 86400]);
-  await vest.waitForDeployment();
-  console.log("VestingWallet (team)", await vest.getAddress());
+  let vest = null, token = null, share = null, sale = null, cairn = null;
+  if (stage !== "stones") {
+    vest = await ethers.deployContract("VestingWallet", [team, Math.floor(Date.now() / 1000), 730 * 86400]);
+    await vest.waitForDeployment();
+    console.log("VestingWallet (team)", await vest.getAddress());
 
-  const token = await ethers.deployContract("CairnToken", [community, deployer.address, await vest.getAddress(), treasury, liquidity]);
-  await token.waitForDeployment();
-  console.log("CairnToken", await token.getAddress());
+    token = await ethers.deployContract("CairnToken", [tokenName, tokenSymbol, community, deployer.address, await vest.getAddress(), treasury, liquidity]);
+    await token.waitForDeployment();
+    console.log(`Token ${tokenName} (${tokenSymbol})`, await token.getAddress());
 
-  const share = await ethers.deployContract("RevenueShare", [await token.getAddress(), deployer.address]);
-  await share.waitForDeployment();
-  console.log("RevenueShare", await share.getAddress());
+    share = await ethers.deployContract("RevenueShare", [await token.getAddress(), deployer.address]);
+    await share.waitForDeployment();
+    console.log("RevenueShare", await share.getAddress());
 
-  const sale = await ethers.deployContract("CairnSale", [await token.getAddress(), usdc.address, tokenPrice, softCap, hardCap, maxPerWallet, start, end, treasury, deployer.address]);
-  await sale.waitForDeployment();
-  const saleAlloc = (await token.TOTAL_SUPPLY()) * 2500n / 10000n;
-  await (await token.transfer(await sale.getAddress(), saleAlloc)).wait();
-  console.log("CairnSale", await sale.getAddress(), `· ${ethers.formatUnits(saleAlloc, 18)} CAIRN at $${Number(tokenPrice) / 1e6}`);
+    sale = await ethers.deployContract("CairnSale", [await token.getAddress(), usdc.address, tokenPrice, softCap, hardCap, maxPerWallet, start, end, treasury, deployer.address]);
+    await sale.waitForDeployment();
+    const saleAlloc = (await token.TOTAL_SUPPLY()) * 2500n / 10000n;
+    await (await token.transfer(await sale.getAddress(), saleAlloc)).wait();
+    console.log("Sale", await sale.getAddress(), `· ${ethers.formatUnits(saleAlloc, 18)} ${tokenSymbol} at $${Number(tokenPrice) / 1e6}`);
+  }
 
-  const cairn = await ethers.deployContract("StoneCairn", [usdc.address, BigInt(usdc.price), treasury, await share.getAddress(), revenueBps, signer, deployer.address]);
-  await cairn.waitForDeployment();
-  for (const s of stables.slice(1)) await (await cairn.setPrice(s.address, BigInt(s.price))).wait();
-  await (await share.setNotifier(await cairn.getAddress(), true)).wait();
-  console.log("StoneCairn", await cairn.getAddress(), `· ${stables.map((s) => s.symbol).join(", ")} · ${revenueBps / 100}% to stakers`);
+  if (stage === "token" && prev?.stoneCairn) {
+    // the stones are already live: point their revenue split at the new RevenueShare
+    cairn = await ethers.getContractAt("StoneCairn", prev.stoneCairn);
+    await (await cairn.setSplit(treasury, await share.getAddress(), revenueBps)).wait();
+    await (await share.setNotifier(prev.stoneCairn, true)).wait();
+    console.log("StoneCairn", prev.stoneCairn, `· split updated: ${revenueBps / 100}% to stakers`);
+  } else {
+    const bps = stage === "stones" ? 0 : revenueBps, sink = stage === "stones" ? ethers.ZeroAddress : await share.getAddress();
+    cairn = await ethers.deployContract("StoneCairn", [usdc.address, BigInt(usdc.price), treasury, sink, bps, signer, deployer.address]);
+    await cairn.waitForDeployment();
+    for (const s of stables.slice(1)) await (await cairn.setPrice(s.address, BigInt(s.price))).wait();
+    if (share) await (await share.setNotifier(await cairn.getAddress(), true)).wait();
+    console.log("StoneCairn", await cairn.getAddress(), `· ${stables.map((s) => s.symbol).join(", ")} · ${bps / 100}% to stakers${bps ? "" : " (all revenue to the treasury until the token stage)"}`);
+  }
+  const addr = async (c) => (c ? await c.getAddress() : null);
 
   const out = {
     network: network.name, chainId: Number((await ethers.provider.getNetwork()).chainId),
     stables: stables.map(({ symbol, address, decimals, price, mock }) => ({ symbol, address, decimals, price, mock: !!mock })),
-    usdc: usdc.address, token: await token.getAddress(), sale: await sale.getAddress(), stoneCairn: await cairn.getAddress(), revenueShare: await share.getAddress(), vesting: await vest.getAddress(),
-    treasury, revenueBps, voucherSigner: signer, stonePrice: usdc.price, tokenPrice: tokenPrice.toString(), saleStart: start, saleEnd: end, deployedAt: new Date().toISOString(),
+    usdc: usdc.address, token: await addr(token), sale: await addr(sale), stoneCairn: await addr(cairn), revenueShare: await addr(share), vesting: await addr(vest),
+    tokenName: token ? tokenName : null, tokenSymbol: token ? tokenSymbol : "DOL", stage: stage === "stones" ? "stones" : "all",
+    treasury, revenueBps: stage === "stones" ? 0 : revenueBps, voucherSigner: stage === "token" && prev ? prev.voucherSigner : signer, stonePrice: usdc.price, tokenPrice: tokenPrice.toString(), saleStart: start, saleEnd: end, deployedAt: new Date().toISOString(),
   };
   fs.mkdirSync("deployments", { recursive: true });
   fs.writeFileSync(`deployments/${network.name}.json`, JSON.stringify(out, null, 2));

@@ -119,9 +119,13 @@ Two more things a stone credit buys, both paid by the person who wants them, nev
   and a ✦ rises for everyone watching (SSE `bless`); the owner is told "✦ N people blessed your wish" on their
   next visit. Endpoint: `POST /api/stones/<id>/bless`.
 
-## On-chain layer (Base L2): stone NFTs, CAIRN token, public sale
+## On-chain layer (Base L2): stone NFTs, the token, public sale
 
-`chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 13 tests, compiles offline).
+`chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 14 tests, compiles offline).
+The token's name and symbol are deployment parameters (`TOKEN_NAME`, `TOKEN_SYMBOL`); the placeholder is **DOL**
+and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes in two stages (`docs/MAINNET.md`):
+`STAGE=stones` deploys only StoneCairn with 100% of revenue to the treasury (a MetaMask address is fine), and
+`STAGE=token` later deploys token + vesting + RevenueShare + sale and calls `setSplit` on the live StoneCairn.
 
 - **StoneCairn** (ERC-721): every stone is an NFT. `stackWith(token, …)` pays in any whitelisted stablecoin
   (USDC, EURC, JPYC, BRZ … each with its own price), split 50/50 between the treasury and **RevenueShare**.
