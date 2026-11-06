@@ -1132,7 +1132,7 @@ async function loadAssets() {
     }
     const wrap = (t, rep = 1) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8; return t; };
     if (m.skies?.some(Boolean)) { // one panorama per altitude band; the dome shader blends neighbours
-      await Promise.all(m.skies.map(async (u, i) => { if (!u) return; const t = await tl.loadAsync(u); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; skyTex[i] = t; }));
+      await Promise.all(m.skies.map(async (u, i) => { if (!u) return; const t = await tl.loadAsync(u); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.offset.x = -0.25; skyTex[i] = t; })); // the panorama's blended seam sits at u=0.5; shift it behind the default camera (+z)
       for (let i = 0; i < 6; i++) skyTex[i] ??= skyTex[i - 1] ?? skyTex.find(Boolean);
       if (!m.skybox && skyTex[0]) { const e = skyTex[0].clone(); e.mapping = THREE.EquirectangularReflectionMapping; e.needsUpdate = true; scene.environment = pmrem.fromEquirectangular(e).texture; }
       applyEnv(altShown);
