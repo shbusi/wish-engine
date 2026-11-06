@@ -266,6 +266,7 @@ export const weatherNow = (now = Date.now()) => { const d = dayOf(now); return {
 function autoSpot(walletId) {
   const taken = q.seedSpots.all(walletId);
   for (let i = 0; i < 400; i++) { const k = walletId + i * 37, a = k * 2.39996, r = RADIUS_MIN + 1 + ((k * 0.618) % 1) * (RADIUS_MAX - RADIUS_MIN - 2); const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (soilAt(x, z) !== "meadow") continue; // the free first seed is a meadow wildflower: it would drown on the riverbank
     if (!taken.some((t) => Math.hypot(t.x - x, t.z - z) < MIN_GAP)) return { x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 }; }
   return { x: 0, z: RADIUS_MIN + 1 };
 }

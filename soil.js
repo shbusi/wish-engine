@@ -64,7 +64,7 @@ export function simulate(plant, today, weatherFn = weatherOn) {
   const sp = SPECIES[plant.kind] ?? SPECIES.wildflower, S = SOILS[plant.soil] ?? SOILS.meadow;
   const phOk = S.ph >= sp.ph[0] && S.ph <= sp.ph[1], texOk = sp.texture.includes(S.texture);
   const waters = new Set(plant.waters ?? []), mulches = plant.mulches ?? [];
-  const st = { moisture: 0.6, health: 100, growth: 0, germinated: false, alive: true, coldDays: 0, stage: 0, stress: [], diedOn: null, cause: null };
+  const st = { moisture: 0.6, health: 100, growth: 0, germinated: false, alive: true, coldDays: 0, droughtDays: 0, stage: 0, stress: [], diedOn: null, cause: null };
   const thr = DROUGHT_THR[sp.drought] ?? 0.2;
   for (let d = plant.plantedDay; d <= today; d++) {
     const w = weatherFn(d), mulched = mulches.some((m) => d >= m && d < m + MULCH_DAYS), stress = [];
@@ -86,15 +86,15 @@ export function simulate(plant, today, weatherFn = weatherOn) {
     }
     // stresses
     let hit = 0;
-    if (st.moisture < thr) { hit += w.cond === "heat" ? 18 : 12; stress.push("drought"); }
-    if (st.moisture > 1.05 && (ANAEROBIC[sp.anaerobic] ?? 6) > 0) { hit += ANAEROBIC[sp.anaerobic]; stress.push("waterlogged"); }
+    if (st.moisture < thr) { st.droughtDays++; hit += Math.min(34, (w.cond === "heat" ? 16 : 10) + 4 * (st.droughtDays - 1)) * (st.stage <= 1 ? 1.5 : 1); stress.push("drought"); } else st.droughtDays = 0; // a dry spell gets worse every day it lasts
+    if (st.moisture > 1.1 && (ANAEROBIC[sp.anaerobic] ?? 6) > 0) { hit += (ANAEROBIC[sp.anaerobic] ?? 6) * 0.7; stress.push("waterlogged"); }
     if (w.tmin < -2 && st.stage <= 2) { hit += mulched ? 4 : 25; stress.push(mulched ? "frostMulched" : "frost"); }
     if (w.tmin < sp.tminC) { hit += 100; stress.push("killingFrost"); }
     if (w.tmax >= 33 && st.moisture < 0.5) { hit += 8; stress.push("heat"); }
     if (!phOk) { hit += 2; stress.push("ph"); }
     if (!texOk) stress.push("texture");
     st.health = Math.max(0, st.health - hit);
-    if (hit === 0) st.health = Math.min(100, st.health + 6);
+    if (hit === 0) st.health = Math.min(100, st.health + 4);
     if (st.health <= 0) { st.alive = false; st.diedOn = d; st.cause = stress.find((s) => s !== "ph" && s !== "texture") ?? "neglect"; st.stress = stress; continue; }
     // growth: growing-degree days above 5 °C, scaled by species rate, soil fit, water and health
     const gdd = Math.max(0, w.tmean - 5) * GARDEN_DAYS_PER_DAY;

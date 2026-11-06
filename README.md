@@ -139,14 +139,25 @@ and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes 
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
-**Seeds and the garden**: the first stone plants a seed at the foot of the tower; the 🌱 button descends to the
-garden. Water it once a day (+1 karma) and it grows through six stages (seed → in bloom at seven waterings); stay
-away and it wilts a stage per few days. Soils lie in patches (`soil.js`, shared by server and page): meadow
-(balanced, wilts after 3 days), riverbank (×1.4 speed, wilts after 2), rocky ground (×0.7, never wilts), moss
-hollow (wilts after 4, where strange seeds bloom). Seeds unlock with karma: wildflower (0), pine (3, evergreen,
-loves rock), lotus (10, opens only on river or moss), lantern tree (50, blooms as lights on moss or rock). Tap the
-ground to choose a spot (soil shown before you commit), pick a seed, plant; moving a plant starts it over.
-Everyone's plants are visible to everyone (`GET /api/seeds`); `POST /api/seed/plant`, `POST /api/seed/water`.
+**Seeds and the garden, on real data** (`agri.js` → `soil.js`, shared by server and page): the first stone plants a
+wildflower at the foot of the tower; the 🌱 button descends to the garden. The four ground patches are unchanged,
+but each now carries a real soil profile from ISRIC SoilGrids (0–5 cm pH, clay, sand, organic carbon, field
+capacity, WRB class at a reference point: Korean uplands, Seoraksan valley floor, an Alpine slope, Hallasan).
+The four seeds are real species with their USDA PLANTS characteristics: black-eyed Susan (*Rudbeckia hirta*),
+eastern white pine (*Pinus strobus*, needs cold stratification), American lotus (*Nelumbo lutea*, blooms only on
+wet ground) and witch-hazel (*Hamamelis virginiana*, blooms in fall); pH range, texture adaptation, drought and
+anaerobic tolerance, moisture use, minimum temperature, growth rate and bloom period all come from that table.
+Weather is deterministic per day from KMA 1991–2020 climate normals (central Korea), with one real day as one
+garden week, so a year of seasons passes in 52 days. The plant is simulated day by day: a water balance (rain,
+evapotranspiration by temperature and the species' moisture use, your watering, the soil's field capacity and
+wetness), germination (moist, mild, and a cold spell first for stratified seeds), drought that worsens every day it
+lasts, frost on seedlings, heat, waterlogging, pH and texture misfit, winter dormancy, bloom season — and death.
+Neglect kills: a wildflower watered only at planting dies of drought in about a month of spring. Actions: water
+(once a day, +1 karma) and mulch (five days: shields seedlings from frost, halves evaporation). The panel shows
+today's and tomorrow's weather, health and soil water, and plain-language warnings ("frost tomorrow night: mulch
+it"). Dead plants stay as a dry stalk until replanted. Endpoints: `GET /api/seeds`, `GET /api/weather`,
+`POST /api/seed/plant|water|mulch`. A live weather provider can replace the simulation when `api.open-meteo.com`
+is reachable. Sources are listed in `agri.js`.
 
 **Karma**: one stone = one wish = one good deed. Every stone placed and every blessing given adds 1 karma to the
 wallet; tiers at 1 / 10 / 50 / 200 (pebble, cairn-keeper, mountain, firmament) are names shown in the HUD, with a
