@@ -5,7 +5,7 @@ process.env.PAYMENT_PROVIDERS = "mock";
 process.env.RATE_PER_MIN = "100";
 process.env.ADMIN_TOKEN = "test-admin";
 const S = await import("./server.js");
-const { addStone, count, recent, after: afterId, createWallet, walletState, createOrder, settleOrder, server, STONE_CM, FREE_EVERY_MS, PACK } = S;
+const { addStone, count, recent, after: afterId, createWallet, walletState, createOrder, settleOrder, server, STONE_CM, FREE_EVERY_MS, PACK, bless, stoneById, newBlessings, FREE_BLESS_PER_DAY } = S;
 
 test("free stone once per period, then credits, with validation", () => {
   const w = createWallet();
@@ -121,6 +121,51 @@ test("http: wallet cookie, post → sse → list, 402 when out of stones", async
   const trav = await fetch(`${base}/vendor/three/../../server.js`);
   assert.notEqual(trav.status, 200);
   await reader.cancel();
+});
+
+test("sealed wish: costs one extra stone, text hidden from everyone but the owner", async () => {
+  const w = createWallet();
+  const t0 = 5_000_000;
+  // free stone available but sealing needs a credit → nothing is spent
+  assert.throws(() => addStone(w, { wish: "secret hope", sealed: true }, t0), /need_credits/);
+  assert.equal(walletState(w, t0).freeNow, true, "free slot untouched");
+  const o = await createOrder(w, "mock"); settleOrder(o.id, true);
+  const r = addStone(w, { name: "Yun", wish: "secret hope", sealed: true }, t0);
+  assert.equal(r.stone.sealed, 1); assert.equal(r.stone.wish, "secret hope", "owner sees the text");
+  assert.equal(r.wallet.credits, PACK.stones - 1, "free stone + one credit for the seal");
+  assert.equal(recent(5).at(-1).wish, null, "public list hides it");
+  assert.equal(recent(5).at(-1).sealed, 1);
+  assert.equal(stoneById(r.stone.id).wish, null); assert.equal(stoneById(r.stone.id, w.id).wish, "secret hope");
+  assert.equal("wallet_id" in recent(5).at(-1), false, "wallet ids never leave the server");
+  // paid + sealed = two credits
+  const r2 = addStone(w, { wish: "second secret", sealed: true }, t0 + 1000);
+  assert.equal(r2.wallet.credits, PACK.stones - 3);
+});
+
+test("blessings: free per day then credits, once per stone, never your own, owner is notified", async () => {
+  const t0 = 9_000_000;
+  const author = createWallet(), fan = createWallet();
+  const stones = [];
+  for (let i = 0; i < FREE_BLESS_PER_DAY + 1; i++) { const w = createWallet(); stones.push(addStone(w, { wish: `wish ${i}` }, t0).stone); }
+  const own = addStone(author, { wish: "mine" }, t0).stone;
+  assert.throws(() => bless(author, own.id, t0), /own_stone/);
+  assert.throws(() => bless(fan, 999999, t0), /not_found/);
+  let last;
+  for (let i = 0; i < FREE_BLESS_PER_DAY; i++) { last = bless(fan, stones[i].id, t0 + i); assert.equal(last.free, true); assert.equal(last.stone.blessings, 1); }
+  assert.equal(last.wallet.blessFreeLeft, 0);
+  assert.throws(() => bless(fan, stones[FREE_BLESS_PER_DAY].id, t0), /need_credits/, "quota used and no credits");
+  assert.equal(stoneById(stones[FREE_BLESS_PER_DAY].id).blessings, 0, "rolled back");
+  const o = await createOrder(fan, "mock"); settleOrder(o.id, true);
+  const paid = bless(fan, stones[FREE_BLESS_PER_DAY].id, t0);
+  assert.equal(paid.free, false); assert.equal(paid.wallet.credits, PACK.stones - 1);
+  assert.throws(() => bless(fan, stones[0].id, t0), /already_blessed/);
+  assert.ok(paid.wallet.blessed.includes(stones[0].id));
+  // next day the free quota is back
+  assert.equal(walletState(S.walletByToken(fan.token), t0 + 86_400_000).blessFreeLeft, FREE_BLESS_PER_DAY);
+  // the owner of a blessed stone is told once
+  const fanStone = addStone(fan, { wish: "fan's own" }, t0 + 86_400_000).stone;
+  bless(author, fanStone.id, t0 + 86_400_001);
+  assert.equal(newBlessings(fan, t0 + 86_400_002), 1); assert.equal(newBlessings(fan, t0 + 86_400_003), 0, "marked seen");
 });
 
 after(() => server.close());

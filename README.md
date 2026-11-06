@@ -63,6 +63,16 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 - A $0.99 pack is the smallest amount that survives PayPal's fixed fee; a single ₩100 stone would not.
   Crypto (USDC on an L2) can be added as a third provider with the same `checkout → settleOrder` shape.
 
+Two more things a stone credit buys, both paid by the person who wants them, never by the reader:
+
+- **Sealed wish** (checkbox in the form, +1 stone): the text is stored but only ever returned to its owner's
+  wallet; everyone else sees "🔏 Sealed wish" and a wax-seal mark engraved under the name. On-chain stones can
+  be sealed at no extra cost (the chain only ever holds the hash).
+- **Blessing** (button in a stone's tooltip): send a light to someone else's stone. `FREE_BLESS_PER_DAY` (3)
+  are free per wallet per day, then one stone each; once per stone per wallet, never your own. The stone glows
+  and a ✦ rises for everyone watching (SSE `bless`); the owner is told "✦ N people blessed your wish" on their
+  next visit. Endpoint: `POST /api/stones/<id>/bless`.
+
 ## On-chain layer (Base L2): stone NFTs, CAIRN token, public sale
 
 `chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 13 tests, compiles offline).

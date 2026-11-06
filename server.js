@@ -19,6 +19,7 @@ const APP_URL = () => process.env.APP_URL ?? `http://localhost:${PORT}`;
 export const STONE_CM = Number(process.env.STONE_CM ?? 9);          // how much one stone lifts the tower
 export const FREE_EVERY_MS = Number(process.env.FREE_EVERY_HOURS ?? 24) * 3_600_000;
 export const PACK = { stones: Number(process.env.PACK_STONES ?? 10), usd: process.env.PACK_PRICE_USD ?? "0.99" };
+export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3); // blessings a wallet may give per day before they cost a stone
 const PROVIDERS = (process.env.PAYMENT_PROVIDERS ?? (process.env.PAYPAL_CLIENT_ID ? "paypal" : "mock")).split(",").map((s) => s.trim()).filter(Boolean);
 const MOCK_OK = process.env.NODE_ENV !== "production" || process.env.ALLOW_MOCK_PAYMENTS === "1";
 
@@ -59,21 +60,38 @@ try { db.exec("ALTER TABLE stones ADD COLUMN bot INTEGER NOT NULL DEFAULT 0"); }
 try { db.exec("ALTER TABLE stones ADD COLUMN chain_id INTEGER"); } catch {}           // StoneCairn token id when the stone was stacked on-chain
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS stones_chain ON stones(chain_id)"); } catch {}
 db.exec(`CREATE TABLE IF NOT EXISTS pending_chain (wish_hash TEXT PRIMARY KEY, wish TEXT NOT NULL, name TEXT, wallet_id INTEGER, created_at INTEGER NOT NULL)`);
+try { db.exec("ALTER TABLE pending_chain ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0"); } catch {}
+// Sealed wishes: the text stays private to the owner (costs one stone). Blessings: others send a light to a stone.
+try { db.exec("ALTER TABLE stones ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE stones ADD COLUMN blessings INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN bless_day INTEGER NOT NULL DEFAULT 0"); } catch {}   // day index of the free-blessing counter
+try { db.exec("ALTER TABLE wallets ADD COLUMN bless_n INTEGER NOT NULL DEFAULT 0"); } catch {}     // free blessings given on bless_day
+try { db.exec("ALTER TABLE wallets ADD COLUMN seen_bless INTEGER NOT NULL DEFAULT 0"); } catch {}  // last time the owner was told about new blessings (ms)
+db.exec(`CREATE TABLE IF NOT EXISTS blessings (stone_id INTEGER NOT NULL, wallet_id INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (stone_id, wallet_id))`);
 const q = {
-  insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, created_at) VALUES (?, ?, ?, ?, ?)"),
+  insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
+  spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
+  stoneFull: db.prepare("SELECT * FROM stones WHERE id = ?"),
+  bless: db.prepare("INSERT OR IGNORE INTO blessings (stone_id, wallet_id, created_at) VALUES (?, ?, ?)"),
+  unbless: db.prepare("DELETE FROM blessings WHERE stone_id = ? AND wallet_id = ?"),
+  countBless: db.prepare("UPDATE stones SET blessings = blessings + 1 WHERE id = ?"),
+  blessDay: db.prepare("UPDATE wallets SET bless_day = ?, bless_n = ? WHERE id = ?"),
+  blessedByMe: db.prepare("SELECT stone_id FROM blessings WHERE wallet_id = ? ORDER BY created_at DESC LIMIT 500"),
+  myBlessings: db.prepare("SELECT COUNT(*) AS n FROM blessings b JOIN stones s ON s.id = b.stone_id WHERE s.wallet_id = ? AND b.created_at > ?"),
+  seenBless: db.prepare("UPDATE wallets SET seen_bless = ? WHERE id = ?"),
   insertBot: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, bot, created_at) VALUES (?, ?, NULL, 0, 1, ?)"),
-  insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)"),
+  insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, sealed, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)"),
   byChain: db.prepare("SELECT id FROM stones WHERE chain_id = ?"),
-  pendingPut: db.prepare("INSERT OR REPLACE INTO pending_chain (wish_hash, wish, name, wallet_id, created_at) VALUES (?, ?, ?, ?, ?)"),
+  pendingPut: db.prepare("INSERT OR REPLACE INTO pending_chain (wish_hash, wish, name, wallet_id, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   pendingGet: db.prepare("SELECT * FROM pending_chain WHERE wish_hash = ?"),
   pendingDel: db.prepare("DELETE FROM pending_chain WHERE wish_hash = ?"),
   lastChain: db.prepare("SELECT MAX(chain_id) AS n FROM stones"),
   botCount: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE bot = 1"),
-  recent: db.prepare("SELECT id, name, wish, created_at FROM stones ORDER BY id DESC LIMIT ?"),
-  after: db.prepare("SELECT id, name, wish, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
+  recent: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
+  after: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
   today: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE created_at > ?"),
-  one: db.prepare("SELECT id, name, wish, created_at FROM stones WHERE id = ?"),
+  one: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id = ?"),
   walletByToken: db.prepare("SELECT * FROM wallets WHERE token = ?"),
   walletById: db.prepare("SELECT * FROM wallets WHERE id = ?"),
   newWallet: db.prepare("INSERT INTO wallets (token, created_at) VALUES (?, ?)"),
@@ -87,9 +105,16 @@ const q = {
 };
 
 export const count = () => q.count.get().n;
-export const recent = (n = 40) => q.recent.all(Math.min(Math.max(1, n), 200)).reverse();
-export const after = (id, n = 100) => q.after.all(Number(id) || 0, Math.min(n, 500));
-export const stoneById = (id) => q.one.get(Number(id) || 0);
+/** Public shape of a stone. A sealed wish's text is only returned to its owner; wallet ids never leave the server. */
+export function pub(row, viewerId = null) {
+  if (!row) return row;
+  const { wallet_id, ...s } = row;
+  if (s.sealed && wallet_id !== viewerId) s.wish = null;
+  return s;
+}
+export const recent = (n = 40, viewerId = null) => q.recent.all(Math.min(Math.max(1, n), 200)).reverse().map((r) => pub(r, viewerId));
+export const after = (id, n = 100, viewerId = null) => q.after.all(Number(id) || 0, Math.min(n, 500)).map((r) => pub(r, viewerId));
+export const stoneById = (id, viewerId = null) => pub(q.one.get(Number(id) || 0), viewerId);
 export const botCount = () => q.botCount.get().n;
 
 /** A stone stacked on-chain (from the indexer). The wish text comes from the pending record the page registered. */
@@ -97,10 +122,10 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   if (q.byChain.get(tokenId)) return null;
   const p = q.pendingGet.get(wishHash);
   const wish = p?.wish ?? "(a wish sealed on-chain)";
-  const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, at ?? Date.now());
+  const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, at ?? Date.now());
   if (p) q.pendingDel.run(wishHash);
   if (r.changes === 0) return null;
-  const stone = q.one.get(Number(r.lastInsertRowid));
+  const stone = pub(q.one.get(Number(r.lastInsertRowid)));
   broadcast({ type: "stone", stone, ...stats() });
   return stone;
 }
@@ -112,7 +137,7 @@ export function addSeedStone({ name, wish, createdAt }) {
   const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
   if (cleanWish.length < 2) throw Object.assign(new Error("too_short"), { status: 400 });
   const r = q.insertBot.run(cleanName || null, cleanWish, Number(createdAt) || Date.now());
-  return q.one.get(Number(r.lastInsertRowid));
+  return pub(q.one.get(Number(r.lastInsertRowid)));
 }
 
 // ---------- wallets ----------
@@ -122,24 +147,54 @@ export function createWallet() {
   return q.walletById.get(Number(r.lastInsertRowid));
 }
 export const walletByToken = (t) => (t ? q.walletByToken.get(t) : undefined);
+const dayOf = (ms) => Math.floor(ms / 86_400_000);
 export function walletState(w, now = Date.now()) {
-  return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM };
+  const blessFreeLeft = w.bless_day === dayOf(now) ? Math.max(0, FREE_BLESS_PER_DAY - w.bless_n) : FREE_BLESS_PER_DAY;
+  return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM, blessFreeLeft, blessed: q.blessedByMe.all(w.id).map((r) => r.stone_id) };
+}
+/** Blessings on this wallet's stones since it last asked, then mark them seen. */
+export function newBlessings(w, now = Date.now()) {
+  const fresh = q.walletById.get(w.id);
+  const n = q.myBlessings.get(fresh.id, fresh.seen_bless).n;
+  if (n) q.seenBless.run(now, fresh.id);
+  return n;
 }
 
-/** Place a stone for a wallet: free if available, else one credit. Throws 402 need_credits. */
-export function addStone(wallet, { name, wish }, now = Date.now()) {
+/** Place a stone for a wallet: free if available, else one credit. Sealing (private wish) costs one more credit. Throws 402 need_credits. */
+export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
   const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim();
   const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
   if (cleanWish.length < 2) throw Object.assign(new Error("too_short"), { status: 400 });
   if (cleanWish.length > 140) throw Object.assign(new Error("too_long"), { status: 400 });
   if (/https?:\/\/|www\./i.test(cleanWish + cleanName)) throw Object.assign(new Error("rejected"), { status: 400 });
+  const seal = sealed ? 1 : 0;
+  const fresh = q.walletById.get(wallet.id);
+  if (fresh.credits < (fresh.free_at <= now ? 0 : 1) + seal) throw Object.assign(new Error("need_credits"), { status: 402 }); // check before spending anything
   let paid = 0;
   if (q.useFree.run(now + FREE_EVERY_MS, wallet.id, now).changes === 0) {
     if (q.useCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
     paid = 1;
   }
-  const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, now);
-  return { stone: q.one.get(Number(r.lastInsertRowid)), wallet: walletState(q.walletById.get(wallet.id), now) };
+  if (seal && q.spendCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
+  const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, now);
+  return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
+}
+
+/** Send a light to someone else's stone. FREE_BLESS_PER_DAY are free each day, then one credit each. Once per stone per wallet. */
+export function bless(wallet, stoneId, now = Date.now()) {
+  const st = q.stoneFull.get(Number(stoneId) || 0);
+  if (!st) throw Object.assign(new Error("not_found"), { status: 404 });
+  if (st.wallet_id === wallet.id) throw Object.assign(new Error("own_stone"), { status: 400 });
+  if (q.bless.run(st.id, wallet.id, now).changes === 0) throw Object.assign(new Error("already_blessed"), { status: 409 });
+  const w = q.walletById.get(wallet.id), today = dayOf(now), used = w.bless_day === today ? w.bless_n : 0;
+  let free = true;
+  if (used < FREE_BLESS_PER_DAY) q.blessDay.run(today, used + 1, wallet.id);
+  else if (q.spendCredit.run(wallet.id).changes === 1) free = false;
+  else { q.unbless.run(st.id, wallet.id); throw Object.assign(new Error("need_credits"), { status: 402 }); }
+  q.countBless.run(st.id);
+  const stone = pub(q.one.get(st.id));
+  broadcast({ type: "bless", id: stone.id, blessings: stone.blessings });
+  return { stone, free, wallet: walletState(q.walletById.get(wallet.id), now) };
 }
 
 // ---------- payments ----------
@@ -280,7 +335,7 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/me") {
       const [w, setCookie] = wallet(req);
-      return json(res, 200, { wallet: walletState(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
+      return json(res, 200, { wallet: walletState(w), newBlessings: newBlessings(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
     }
 
     // ---- on-chain stacking: register the wish text (only its hash goes on-chain), get a free-stone voucher
@@ -288,13 +343,13 @@ export const server = http.createServer(async (req, res) => {
       if (!chain()) return json(res, 404, { error: "no_chain" });
       if (limited(ip, "prep", 20)) return json(res, 429, { error: "rate_limited" });
       const [w, setCookie] = wallet(req);
-      const { wish, name, address, wantFree } = await readBody(req);
+      const { wish, name, address, wantFree, sealed } = await readBody(req);
       const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim();
       const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
       if (cleanWish.length < 2 || cleanWish.length > 140 || /https?:\/\/|www\./i.test(cleanWish + cleanName)) return json(res, 400, { error: "rejected" });
       if (!/^0x[0-9a-fA-F]{40}$/.test(String(address ?? ""))) return json(res, 400, { error: "bad_address" });
       const { wishHash, salt } = preparePending(cleanWish);
-      q.pendingPut.run(wishHash, cleanWish, cleanName || null, w.id, Date.now());
+      q.pendingPut.run(wishHash, cleanWish, cleanName || null, w.id, sealed ? 1 : 0, Date.now());
       let voucher = null;
       // The daily free stone works on-chain too: consume the web2 free slot and hand back a signed voucher.
       if (wantFree && w.free_at <= Date.now() && q.useFree.run(Date.now() + FREE_EVERY_MS, w.id, Date.now()).changes === 1) voucher = await signVoucher(address);
@@ -303,8 +358,9 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/stones") {
       const a = url.searchParams.get("after"), id = url.searchParams.get("id");
-      if (id) { const s = stoneById(id); return s ? json(res, 200, { stone: s }) : json(res, 404, { error: "not_found" }); }
-      return json(res, 200, { ...stats(), stones: a ? after(a) : recent(Number(url.searchParams.get("n") ?? 40)) });
+      const viewer = walletByToken(cookieOf(req, WALLET_COOKIE))?.id ?? null; // owners see their own sealed wishes
+      if (id) { const s = stoneById(id, viewer); return s ? json(res, 200, { stone: s }) : json(res, 404, { error: "not_found" }); }
+      return json(res, 200, { ...stats(), stones: a ? after(a, 100, viewer) : recent(Number(url.searchParams.get("n") ?? 40), viewer) });
     }
 
     if (req.method === "POST" && url.pathname === "/api/stones") {
@@ -313,11 +369,20 @@ export const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       try {
         const r = addStone(w, body);
-        broadcast({ type: "stone", stone: r.stone, ...stats() });
+        broadcast({ type: "stone", stone: pub(q.one.get(r.stone.id)), ...stats() }); // everyone else gets the public shape (sealed text hidden)
         return json(res, 201, { ...r, ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
       } catch (e) {
         return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w), pack: PACK, providers: enabledProviders() }, setCookie ? { "Set-Cookie": setCookie } : {});
       }
+    }
+
+    // Bless someone's stone: POST /api/stones/<id>/bless
+    const mb = req.method === "POST" && url.pathname.match(/^\/api\/stones\/(\d+)\/bless$/);
+    if (mb) {
+      if (limited(ip, "bless", 30)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      try { return json(res, 200, bless(w, mb[1]), setCookie ? { "Set-Cookie": setCookie } : {}); }
+      catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w), pack: PACK, providers: enabledProviders() }, setCookie ? { "Set-Cookie": setCookie } : {}); }
     }
 
     // Operator-only: seed stones from tools/seed-users.mjs. Requires ADMIN_TOKEN.
