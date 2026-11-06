@@ -59,6 +59,17 @@ STAGE=token npx hardhat run scripts/deploy.js --network base
 
 스크립트가 기존 `base.json`의 StoneCairn을 찾아 `setSplit`으로 매출의 50%를 새 RevenueShare로 돌리고, 파일을 갱신합니다. 서버를 재시작하면 투자자 페이지와 대시보드에 세일·스테이킹이 열립니다. 그 전에 `CairnSale`·`RevenueShare` 외부 감사를 받으세요. 이 둘이 돈을 쥡니다.
 
+## 정해진 값
+
+| 항목 | 값 |
+|---|---|
+| 서비스 주소 | https://wish-engine-production.up.railway.app (Railway) |
+| 트레저리 (`TREASURY`) | `0xB6E0915c8CEe08d49D60761E30E7691bE42a6C6f` (Phantom 지갑의 EVM 주소, 체크섬 확인 완료) |
+| 기부 지갑 (`DONATION`) | 미정 |
+| 토큰 이름 | 미정 (임시 DOL) |
+
+Phantom의 이더리움 주소는 Base에서도 같은 주소로 쓰이므로 그대로 받을 수 있다. Phantom 앱에서 Base 네트워크가 보이지 않으면 같은 시드 구문을 메타마스크에 넣어도 같은 주소·같은 잔액이다.
+
 ## 돌아가기 전 체크리스트
 
 - [ ] Treasury 주소를 메타마스크에서 두 번 확인 (한 글자라도 틀리면 매출이 영영 사라집니다)
