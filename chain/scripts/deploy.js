@@ -26,6 +26,7 @@ const TEST_STABLES = [
 
 async function main() {
   const [deployer] = await ethers.getSigners();
+  if (!deployer) throw new Error("No deployer account: set DEPLOYER_KEY (private key of the deployer wallet) in chain/.env");
   const treasury = env("TREASURY", deployer.address);
   const team = env("TEAM", deployer.address);
   const community = env("COMMUNITY", deployer.address);

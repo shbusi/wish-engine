@@ -1,4 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
+const path = require("node:path");
+// Load chain/.env automatically (no `source .env` needed, works on Windows). Shell variables win.
+try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env yet */ }
 const { subtask } = require("hardhat/config");
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require("hardhat/builtin-tasks/task-names");
 

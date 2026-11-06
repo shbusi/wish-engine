@@ -52,7 +52,7 @@ cp .env.example .env     # 값을 채웁니다. .env는 git에 올라가지 않�
 최소 필수: `DEPLOYER_KEY`, `VOUCHER_SIGNER`(주소). 나머지는 기본값(배포자 주소)으로 채워집니다.
 세일을 바로 열어 보고 싶으면 `SALE_START`를 몇 분 전 시각으로, 기간을 짧게(`SALE_DAYS=1`) 두세요.
 
-> `.env`를 읽으려면 셸에서 `set -a; source .env; set +a` 를 한 뒤 명령을 실행하거나, 아래처럼 한 줄에 함께 적습니다.
+> `chain/.env`는 hardhat이 자동으로 읽습니다. `source` 같은 셸 명령이 필요 없고 윈도우 cmd/PowerShell에서도 그대로 됩니다. 셸에 이미 같은 이름의 변수가 있으면 그쪽이 우선합니다.
 
 ## 4. 배포
 
@@ -60,9 +60,11 @@ cp .env.example .env     # 값을 채웁니다. .env는 git에 올라가지 않�
 cd chain
 npm install            # 처음 한 번
 npm test               # 13개 통과 확인
-set -a; source .env; set +a
 npx hardhat run scripts/deploy.js --network baseSepolia
 ```
+
+> 윈도우에서 `npm test`가 `MODULE_NOT_FOUND`(mocha 관련 스택)로 죽으면 설치가 중간에 끊긴 겁니다. `chain` 폴더에서 `node_modules`와 `package-lock.json`을 지우고 `npm install`을 다시 하세요. Node는 `node -v`로 22 이상인지 확인합니다.
+> `Cannot read properties of undefined (reading 'address')` 또는 `No deployer account`는 `DEPLOYER_KEY`가 비어 있다는 뜻입니다. `chain/.env`가 `chain` 폴더 바로 안에 있고 키가 `0x`로 시작하는지 확인하세요.
 
 출력 예:
 ```
@@ -99,9 +101,10 @@ npx hardhat verify --network baseSepolia <StoneCairn주소> <usdc> 100000 <treas
 ```bash
 cp .env.example .env
 # 채울 것: CHAIN_DEPLOYMENT=chain/deployments/baseSepolia.json, CHAIN_RPC_URL, VOUCHER_SIGNER_KEY(서명자 키), ADMIN_TOKEN
-set -a; source .env; set +a
-node server.js
+node --env-file=.env server.js
 ```
+
+(윈도우도 같은 명령입니다. Node 22의 `--env-file`이 `.env`를 읽습니다.)
 
 시작 로그에 `chain: baseSepolia`가 찍혀야 합니다. `curl localhost:3000/api/me`의 `chain.stables`에 네 코인이 보이면 연결된 겁니다.
 
