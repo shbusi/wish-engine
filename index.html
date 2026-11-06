@@ -648,8 +648,9 @@ function applyEnv(altM) {
   waterCeiling.material.uniforms.op.value = e.water; waterCeiling.visible = e.water > 0.01;
   skyMat.uniforms.firm.value = e.firm; causticU.mul.value = e.caustic;
   if (skyTex.length) { const a = skyTex[Math.min(e.band, skyTex.length - 1)], b = skyTex[Math.min(e.band + 1, skyTex.length - 1)]; if (a && b) { skyMat.uniforms.tex0.value = a; skyMat.uniforms.tex1.value = b; skyMat.uniforms.texMix.value = e.t; skyMat.uniforms.useTex.value = 1; } }
-  { const far = Math.min(1, Math.max(0, (camera.position.distanceTo(controls.target) - 28) / 20)); // the mist disc thins out as the camera pulls far away, so its edge never shows from above
-    mist.material.uniforms.op.value = gardenView ? 0 : e.mist * (1 - far); mist.visible = !gardenView && e.mist * (1 - far) > 0.01; }
+  { const far = Math.min(1, Math.max(0, (camera.position.distanceTo(controls.target) - 28) / 20)); // the mist disc thins out as the camera pulls far away
+    const tilt = Math.min(1, Math.max(0, (controls.getPolarAngle() - 0.35) / 0.5));                      // and as the camera tilts to look straight down, where the disc would read as a hard circle
+    const m = e.mist * (1 - far) * tilt; mist.material.uniforms.op.value = gardenView ? 0 : m; mist.visible = !gardenView && m > 0.01; }
   shafts.m.uniforms.op.value = e.shafts; shafts.grp.visible = e.shafts > 0.01; shafts.grp.position.y = towerTop;
   // the ceiling hangs high above a low tower and comes down to just overhead by the firmament band
   const prog = Math.min(1, altM / BANDS[4]); waterCeiling.position.y = towerTop + 70 - 62 * prog * prog;
