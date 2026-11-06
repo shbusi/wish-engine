@@ -37,6 +37,8 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
     address public treasury;
     address public revenueShare;   // RevenueShare contract (stakers)
     uint16 public revenueBps;      // share of every payment sent to stakers, out of 10_000
+    address public charity;        // donation wallet: a pledged share of every paid stone goes here, in the same transaction
+    uint16 public charityBps;      // out of 10_000; revenueBps + charityBps <= 10_000, the rest is the treasury's
     address public voucherSigner;  // backend key that signs free-stone vouchers
     string public baseURI;
 
@@ -49,6 +51,7 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
     event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free, address token, uint256 amount);
     event PriceSet(address indexed token, uint256 price);
     event SplitSet(address treasury, address revenueShare, uint16 revenueBps);
+    event CharitySet(address charity, uint16 charityBps);
     event SignerSet(address signer);
 
     constructor(address usdc_, uint256 usdcPrice_, address treasury_, address revenueShare_, uint16 revenueBps_, address signer_, address owner_)
@@ -81,7 +84,9 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
         uint256 price = priceOf[token];
         require(price > 0, "token not accepted");
         uint256 toStakers = price * revenueBps / 10_000;
-        if (price - toStakers > 0) IERC20(token).safeTransferFrom(msg.sender, treasury, price - toStakers);
+        uint256 toCharity = price * charityBps / 10_000;
+        if (toCharity > 0) IERC20(token).safeTransferFrom(msg.sender, charity, toCharity);
+        if (price - toStakers - toCharity > 0) IERC20(token).safeTransferFrom(msg.sender, treasury, price - toStakers - toCharity);
         if (toStakers > 0) {
             IERC20(token).safeTransferFrom(msg.sender, revenueShare, toStakers);
             IRevenueSink(revenueShare).notify(token, toStakers);
@@ -141,12 +146,21 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
     }
 
     function setSplit(address treasury_, address revenueShare_, uint16 revenueBps_) external onlyOwner {
-        require(treasury_ != address(0) && revenueBps_ <= 10_000, "bad split");
+        require(treasury_ != address(0) && revenueBps_ + charityBps <= 10_000, "bad split");
         require(revenueShare_ != address(0) || revenueBps_ == 0, "no sink");
         treasury = treasury_;
         revenueShare = revenueShare_;
         revenueBps = revenueBps_;
         emit SplitSet(treasury_, revenueShare_, revenueBps_);
+    }
+
+    /// @notice The donation pledge: `charityBps_` of every paid stone goes to `charity_` (0 bps turns it off).
+    function setCharity(address charity_, uint16 charityBps_) external onlyOwner {
+        require(charity_ != address(0) || charityBps_ == 0, "no charity");
+        require(revenueBps + charityBps_ <= 10_000, "bad split");
+        charity = charity_;
+        charityBps = charityBps_;
+        emit CharitySet(charity_, charityBps_);
     }
 
     function setVoucherSigner(address signer_) external onlyOwner {

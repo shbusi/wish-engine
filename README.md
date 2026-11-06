@@ -139,6 +139,11 @@ and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes 
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
+**Giving**: `DONATION_BPS` (10%) of every stone's revenue is given away, off the top. On-chain it is a contract rule
+(`StoneCairn.setCharity(wallet, bps)`, set from `DONATION`/`DONATION_BPS` at deploy): the share goes to the donation
+wallet in the same transaction as the purchase. For web packs the operator transfers the same share monthly and
+`/api/metrics` reports the running pledge. The recipient (`DONATION_NAME`) is announced before launch.
+
 **Investor overview `/investors`** (public, no wallet needed): the pitch in one screen with live numbers from
 `GET /api/metrics` (visitor stones per day for 14 days, unique wishers, return rate, free → paid conversion, pack
 revenue, on-chain stones; seeded stones are excluded and never labelled), the money flow, token allocation and

@@ -33,6 +33,7 @@ async function main() {
   const liquidity = env("LIQUIDITY", deployer.address);
   const signer = env("VOUCHER_SIGNER", deployer.address);
   const revenueBps = Number(env("REVENUE_BPS", 5000)); // share of every stone that goes to stakers
+  const donation = env("DONATION", null), donationBps = donation ? Number(env("DONATION_BPS", 1000)) : 0; // pledged share of every stone to a charity wallet
   const tokenPrice = BigInt(env("TOKEN_PRICE_USDC", "20000"));  // $0.02
   const softCap = BigInt(env("SOFT_CAP_USDC", String(250_000e6)));
   const hardCap = BigInt(env("HARD_CAP_USDC", String(2_000_000e6)));
@@ -89,6 +90,8 @@ async function main() {
     if (share) await (await share.setNotifier(await cairn.getAddress(), true)).wait();
     console.log("StoneCairn", await cairn.getAddress(), `· ${stables.map((s) => s.symbol).join(", ")} · ${bps / 100}% to stakers${bps ? "" : " (all revenue to the treasury until the token stage)"}`);
   }
+  if (donation && stage !== "token") { await (await cairn.setCharity(donation, donationBps)).wait(); console.log(`donation pledge: ${donationBps / 100}% of every stone → ${donation}`); }
+  else if (donation && stage === "token" && prev?.donation !== donation) { await (await cairn.setCharity(donation, donationBps)).wait(); console.log(`donation pledge updated: ${donationBps / 100}% → ${donation}`); }
   const addr = async (c) => (c ? await c.getAddress() : null);
 
   const out = {
@@ -96,7 +99,7 @@ async function main() {
     stables: stables.map(({ symbol, address, decimals, price, mock }) => ({ symbol, address, decimals, price, mock: !!mock })),
     usdc: usdc.address, token: await addr(token), sale: await addr(sale), stoneCairn: await addr(cairn), revenueShare: await addr(share), vesting: await addr(vest),
     tokenName: token ? tokenName : null, tokenSymbol: token ? tokenSymbol : "DOL", stage: stage === "stones" ? "stones" : "all",
-    treasury, revenueBps: stage === "stones" ? 0 : revenueBps, voucherSigner: stage === "token" && prev ? prev.voucherSigner : signer, stonePrice: usdc.price, tokenPrice: tokenPrice.toString(), saleStart: start, saleEnd: end, deployedAt: new Date().toISOString(),
+    treasury, donation: donation ?? prev?.donation ?? null, donationBps: donation ? donationBps : prev?.donationBps ?? 0, revenueBps: stage === "stones" ? 0 : revenueBps, voucherSigner: stage === "token" && prev ? prev.voucherSigner : signer, stonePrice: usdc.price, tokenPrice: tokenPrice.toString(), saleStart: start, saleEnd: end, deployedAt: new Date().toISOString(),
   };
   fs.mkdirSync("deployments", { recursive: true });
   fs.writeFileSync(`deployments/${network.name}.json`, JSON.stringify(out, null, 2));

@@ -23,6 +23,9 @@ export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3);
 // The firmament: when the tower reaches FIRMAMENT_M metres, everyone who has placed a stone receives FIRMAMENT_REWARD
 // stone credits "from the waters above", and the wallet whose stone touched it gets FIRMAMENT_KEYSTONE_REWARD.
 export const FIRMAMENT_M = Number(process.env.FIRMAMENT_M ?? 250);
+// The donation pledge, as shown to visitors and investors. On-chain it is enforced by StoneCairn (DONATION / DONATION_BPS at deploy);
+// for web (PayPal) revenue the operator transfers DONATION_BPS of each month's packs and the dashboard shows the pledged amount.
+export const DONATION = { bps: Number(process.env.DONATION_BPS ?? 1000), name: process.env.DONATION_NAME ?? "", url: process.env.DONATION_URL ?? "" };
 export const FIRMAMENT_REWARD = Number(process.env.FIRMAMENT_REWARD ?? 1);
 export const FIRMAMENT_KEYSTONE_REWARD = Number(process.env.FIRMAMENT_KEYSTONE_REWARD ?? 10); // blessings a wallet may give per day before they cost a stone
 const PROVIDERS = (process.env.PAYMENT_PROVIDERS ?? (process.env.PAYPAL_CLIENT_ID ? "paypal" : "mock")).split(",").map((s) => s.trim()).filter(Boolean);
@@ -384,7 +387,8 @@ export function metrics(now = Date.now()) {
   const rows = new Map(q.mDays.all(from).map((r) => [r.d, r]));
   const days = Array.from({ length: DAYS }, (_, i) => { const d = today - DAYS + 1 + i; const r = rows.get(d); return { day: new Date(d * 86_400_000).toISOString().slice(0, 10), stones: r?.n ?? 0, wallets: r?.w ?? 0, paid: r?.p ?? 0 }; });
   const t = q.mTotals.get(), buyers = q.mBuyers.get();
-  const v = { days, totals: { stones: t.stones, wallets: t.wallets, paid: t.paid ?? 0, sealed: t.sealed ?? 0, onchain: t.onchain ?? 0, blessings: t.blessings ?? 0, returning: q.mReturning.get().n, buyers: buyers.n, revenueUsd: Math.round(buyers.usd * 100) / 100 }, towerStones: count(), stoneCm: STONE_CM, at: now };
+  const revenueUsd = Math.round(buyers.usd * 100) / 100;
+  const v = { days, totals: { stones: t.stones, wallets: t.wallets, paid: t.paid ?? 0, sealed: t.sealed ?? 0, onchain: t.onchain ?? 0, blessings: t.blessings ?? 0, returning: q.mReturning.get().n, buyers: buyers.n, revenueUsd }, donation: { ...DONATION, pledgedUsd: Math.round(revenueUsd * DONATION.bps) / 10000 }, towerStones: count(), stoneCm: STONE_CM, at: now };
   metricsCache = { at: now, v };
   return v;
 }

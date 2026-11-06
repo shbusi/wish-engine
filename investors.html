@@ -70,6 +70,9 @@
     <p class="muted" data-i18n="howNote">Investors are paid from revenue, not from a buyback or a promise. When stone sales rise, distributions rise the same day. Revenue is distributed per stablecoin, so there is no conversion loss. Web payments (PayPal) are converted to USDC by the operator and deposited into the same pool.</p>
   </div>
 
+  <h2 data-i18n="givingTitle">Giving</h2>
+  <div class="card" id="giving"><p id="givingText"></p><p class="muted" id="givingHow"></p><div class="grid" style="margin:8px 0 0"><div class="stat"><div class="k" data-i18n="pledgedWeb">Pledged from web packs so far</div><div class="v" id="pledgedUsd">—</div></div><div class="stat"><div class="k" data-i18n="donationWallet">Donation wallet (on-chain)</div><div class="v" id="donationWallet" style="font-size:14px;word-break:break-all">—</div></div></div></div>
+
   <h2 data-i18n="tokenTitle" id="tokenTitle">The CAIRN token</h2>
   <div class="card">
     <p data-i18n="tokenLead">Fixed supply of 1,000,000,000 CAIRN, minted once at deployment. No mint function, no owner, no pause, no blacklist, no transfer tax.</p>
@@ -127,6 +130,10 @@ const T = {
     contractNames:{ stoneCairn:"StoneCairn (stone NFTs, payments, split)", revenueShare:"RevenueShare (staking, distributions)", token:"CairnToken (ERC-20)", sale:"CairnSale (public sale)", vesting:"VestingWallet (team, 24 months)", treasury:"Treasury" },
     planTitle:"Plan",
     plan:["Testnet rehearsal on Base Sepolia: full flow with mock stablecoins (now).","Four weeks of real usage data before any sale: daily stones, return rate, free → paid conversion.","External audit of CairnSale and RevenueShare; treasury moved to a Safe multisig.","Base mainnet deployment with USDC and EURC; other stablecoins added as they are issued on Base.","Public sale opens only after the metrics above are public for a month."],
+    givingTitle:"Giving", pledgedWeb:"Pledged from web packs so far", donationWallet:"Donation wallet (on-chain)",
+    givingText:(pct,name)=>`${pct}% of every stone's revenue is given away${name ? ` to ${name}` : ""}. Not from profit, from revenue: it comes off the top before the treasury or the stakers see a cent.`,
+    givingHow:(pct)=>`On-chain this is not a promise but a rule: the stone contract sends the ${pct}% to the donation wallet in the same transaction as the purchase, and anyone can read the wallet's history on the explorer. For web payments (PayPal) the operator transfers the same share monthly and this page shows the running pledge.`,
+    givingTbd:"The recipient is being chosen and will be announced before launch; token holders vote on it afterwards.", notOnChain:"set at deployment",
     placeholderNote:"DOL is a working name. The final token name is still being chosen and will be announced before the sale.", stonesOnly:"Stage 1 is live: stones are on-chain and all revenue goes to the treasury. The token, staking and sale deploy in stage 2.",
     riskTitle:"Risks, plainly",
     risks:["This is early. Visitor numbers are small and may stay small.","Contracts are not yet audited. No mainnet sale happens before an audit.","Token value depends on stone revenue. If people stop stacking, distributions stop.","Regulation of token sales differs by country and may restrict who can participate."],
@@ -152,6 +159,10 @@ const T = {
     contractNames:{ stoneCairn:"StoneCairn (돌 NFT, 결제, 분배)", revenueShare:"RevenueShare (스테이킹, 분배)", token:"CairnToken (ERC-20)", sale:"CairnSale (공개 세일)", vesting:"VestingWallet (팀, 24개월)", treasury:"트레저리" },
     planTitle:"계획",
     plan:["Base Sepolia 테스트넷 리허설: 모의 스테이블코인으로 전체 흐름 (지금).","세일 전 최소 4주의 실사용 데이터: 일일 돌 수, 재방문율, 무료→유료 전환.","CairnSale·RevenueShare 외부 감사. 트레저리를 Safe 멀티시그로.","Base 메인넷 배포 (USDC·EURC). 다른 스테이블코인은 Base 발행에 맞춰 추가.","위 지표가 한 달간 공개된 뒤에만 공개 세일을 엽니다."],
+    givingTitle:"기부", pledgedWeb:"웹 팩 매출에서 지금까지 약정된 기부금", donationWallet:"기부 지갑 (온체인)",
+    givingText:(pct,name)=>`모든 돌 매출의 ${pct}%는 기부합니다${name ? ` (${name})` : ""}. 이익이 아니라 매출에서 떼는 것이라, 트레저리나 스테이커보다 먼저 빠져나갑니다.`,
+    givingHow:(pct)=>`온체인에서는 약속이 아니라 규칙입니다. 돌 컨트랙트가 구매와 같은 트랜잭션에서 ${pct}%를 기부 지갑으로 보내고, 그 지갑의 내역은 누구나 탐색기에서 읽을 수 있습니다. 웹 결제(PayPal) 매출은 운영자가 매달 같은 비율을 송금하고, 이 페이지에 누적 약정액이 표시됩니다.`,
+    givingTbd:"기부처는 선정 중이며 런칭 전에 공개합니다. 이후엔 토큰 홀더 투표로 정합니다.", notOnChain:"배포 시 설정",
     placeholderNote:"DOL은 임시 이름입니다. 정식 토큰 이름은 아직 정하는 중이며 세일 전에 공개합니다.", stonesOnly:"1단계가 돌아가고 있습니다. 돌은 온체인이고 매출은 전부 트레저리로 갑니다. 토큰·스테이킹·세일은 2단계에서 배포됩니다.",
     riskTitle:"리스크, 있는 그대로",
     risks:["초기 단계입니다. 방문자 수가 적고, 계속 적을 수 있습니다.","컨트랙트는 아직 감사 전입니다. 감사 전엔 메인넷 세일이 없습니다.","토큰 가치는 돌 매출에 달려 있습니다. 사람들이 돌을 안 쌓으면 분배도 멈춥니다.","토큰 세일 규제는 나라마다 다르고 참여가 제한될 수 있습니다."],
@@ -200,8 +211,11 @@ const max = Math.max(1, ...m.days.map((d) => d.stones));
 $("bars").innerHTML = m.days.map((d) => `<div style="height:${Math.max(2, d.stones / max * 100)}%" title="${d.day}: ${d.stones}"><span>${d.stones || ""}</span></div>`).join("");
 $("d0").textContent = m.days[0].day; $("d1").textContent = m.days.at(-1).day;
 const stables = cfg?.stables?.map((s) => s.symbol).join(" / ") ?? "USDC / EURC / JPYC / BRZ";
-const bps = cfg?.revenueBps ?? 5000;
-$("flow").textContent = `wisher ──${stables}──▶ StoneCairn ──${100 - bps / 100}%──▶ treasury (operations)\n                                   └──${bps / 100}%──▶ RevenueShare ──▶ CAIRN stakers, paid in the same coin\nweb payments (PayPal) ──operator converts to USDC──▶ RevenueShare.deposit() ──▶ same pool`;
+const bps = cfg?.revenueBps ?? 5000, dbps = cfg?.donationBps || m.donation?.bps || 0, dpct = dbps / 100;
+$("flow").textContent = `wisher ──${stables}──▶ StoneCairn ──${dpct}%──▶ donation wallet (giving)\n                                   ├──${100 - bps / 100 - dpct}%──▶ treasury (operations)\n                                   └──${bps / 100}%──▶ RevenueShare ──▶ ${SYM} stakers, paid in the same coin\nweb payments (PayPal) ──operator converts to USDC──▶ ${dpct}% donated monthly · RevenueShare.deposit() ──▶ same pool`;
+$("givingText").textContent = t("givingText", dpct, m.donation?.name || ""); $("givingHow").textContent = t("givingHow", dpct) + (m.donation?.name ? "" : " " + t("givingTbd"));
+$("pledgedUsd").textContent = `$${fmt(m.donation?.pledgedUsd ?? 0, 2)}`;
+$("donationWallet").innerHTML = cfg?.donation ? (cfg.explorer ? `<a href="${cfg.explorer}/address/${cfg.donation}" target="_blank" rel="noopener">${cfg.donation}</a>` : cfg.donation) : `<span class="muted">${t("notOnChain")}</span>`;
 
 // live: chain
 if (!cfg) { $("distributed").textContent = t("noChain"); $("saleLive").textContent = t("saleState").none; $("netLine").textContent = t("noChain"); $("contracts").innerHTML = ""; }

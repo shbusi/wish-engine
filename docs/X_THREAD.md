@@ -37,12 +37,15 @@ What's on-chain (Base):
 • 50% of every stone sold is paid out to CAIRN stakers, in the same coin, in the same transaction
 
 **5/**
-The CAIRN token in one breath:
+10% of every stone's revenue is given away. Not from profit, from revenue, and on-chain it's a rule in the contract, not a promise: the donation wallet receives it in the same transaction you stack with.
+
+**6/**
+The token in one breath:
 fixed 1B supply · no mint, no owner, no pause · team locked 24 months in OpenZeppelin vesting · sale with full refunds if the soft cap is missed.
 
 Everything verifiable on the block explorer. Overview with live numbers: {URL}/investors
 
-**6/**
+**7/**
 What we're doing before any sale:
 1. testnet rehearsal (now)
 2. four weeks of public usage data
@@ -51,7 +54,7 @@ What we're doing before any sale:
 
 Numbers go public first, token second. Follow the tower: {URL}
 
-**7/ (daily reply template, post in the thread each day)**
+**8/ (daily reply template, post in the thread each day)**
 Day {D}: the tower is {HEIGHT} m. +{N} stones today. {CITY} stacked the top stone.
 [screenshot of the tower at today's height]
 
@@ -88,12 +91,15 @@ Day {D}: the tower is {HEIGHT} m. +{N} stones today. {CITY} stacked the top ston
 • 팔린 돌의 50%가 같은 트랜잭션에서 같은 코인으로 CAIRN 스테이커에게 갑니다
 
 **5/**
-CAIRN 토큰 한 줄 요약:
+모든 돌 매출의 10%는 기부합니다. 이익이 아니라 매출에서 떼고, 온체인에선 약속이 아니라 컨트랙트 규칙입니다. 돌을 올리는 그 트랜잭션에서 기부 지갑으로 바로 갑니다.
+
+**6/**
+토큰 한 줄 요약:
 10억 개 고정 · 추가 발행·오너·정지 없음 · 팀 물량 24개월 잠금 · 소프트캡 미달 시 전액 환불.
 
 전부 탐색기에서 확인됩니다. 실시간 숫자와 함께: {URL}/investors?lang=ko
 
-**6/**
+**7/**
 세일 전에 하는 것:
 1. 테스트넷 리허설 (지금)
 2. 4주간 사용 데이터 공개
@@ -102,7 +108,7 @@ CAIRN 토큰 한 줄 요약:
 
 숫자가 먼저, 토큰은 그다음입니다. 탑을 지켜봐 주세요: {URL}
 
-**7/ (매일 스레드에 다는 답글 템플릿)**
+**8/ (매일 스레드에 다는 답글 템플릿)**
 {D}일째: 탑 {HEIGHT} m. 오늘 +{N}개. 맨 위 돌은 {CITY}에서 올라왔습니다.
 [오늘 높이의 탑 스크린샷]
 

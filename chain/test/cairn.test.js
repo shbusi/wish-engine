@@ -252,3 +252,26 @@ describe("Two-stage launch: stones first, token later", function () {
     expect(await token.name()).to.equal("Dol"); expect(await token.symbol()).to.equal("DOL");
   });
 });
+
+describe("Donation pledge", function () {
+  it("sends the pledged share of every paid stone to the charity wallet in the same transaction", async function () {
+    const [owner, treasury, signer, user, charity] = await ethers.getSigners();
+    const usdc = await ethers.deployContract("MockStable", ["USDC", "USDC", 6]);
+    const token = await ethers.deployContract("CairnToken", ["Dol", "DOL", owner.address, owner.address, owner.address, treasury.address, owner.address]);
+    const share = await ethers.deployContract("RevenueShare", [await token.getAddress(), owner.address]);
+    const cairn = await ethers.deployContract("StoneCairn", [await usdc.getAddress(), 100000n, treasury.address, await share.getAddress(), 5000, signer.address, owner.address]);
+    await share.setNotifier(await cairn.getAddress(), true);
+    await expect(cairn.setCharity(charity.address, 6000)).to.be.revertedWith("bad split"); // 50% + 60% > 100%
+    await expect(cairn.connect(user).setCharity(charity.address, 1000)).to.be.reverted;      // owner only
+    await cairn.setCharity(charity.address, 1000);                                           // 10%
+    await usdc.mint(user.address, 1_000_000n); await usdc.connect(user).approve(await cairn.getAddress(), ethers.MaxUint256);
+    await cairn.connect(user).stackWith(await usdc.getAddress(), ethers.ZeroHash, "giver");
+    expect(await usdc.balanceOf(charity.address)).to.equal(10000n);
+    expect(await usdc.balanceOf(await share.getAddress())).to.equal(50000n);
+    expect(await usdc.balanceOf(treasury.address)).to.equal(40000n);
+    await expect(cairn.setSplit(treasury.address, await share.getAddress(), 9500)).to.be.revertedWith("bad split"); // would leave no room for the pledge
+    await cairn.setCharity(ethers.ZeroAddress, 0);
+    await cairn.connect(user).stackWith(await usdc.getAddress(), ethers.ZeroHash, "later");
+    expect(await usdc.balanceOf(charity.address)).to.equal(10000n, "pledge off → nothing more");
+  });
+});
