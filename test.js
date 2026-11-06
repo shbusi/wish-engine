@@ -143,6 +143,26 @@ test("sealed wish: costs one extra stone, text hidden from everyone but the owne
   assert.equal(r2.wallet.credits, PACK.stones - 3);
 });
 
+test("private wish: free, text hidden from others, owner toggles it, can be blessed; sealed stones are closed", async () => {
+  const w = createWallet(), other = createWallet();
+  const t0 = 6_000_000;
+  const r = addStone(w, { name: "Mia", wish: "kept to myself", private: true }, t0);
+  assert.equal(r.stone.private, 1); assert.equal(r.stone.wish, "kept to myself", "owner sees the text"); assert.equal(r.stone.mine, 1);
+  assert.equal(r.wallet.credits, 0, "privacy costs nothing: the free stone was used, no credit spent");
+  assert.equal(stoneById(r.stone.id).wish, null, "others do not"); assert.equal(stoneById(r.stone.id, w.id).wish, "kept to myself");
+  assert.equal("mine" in stoneById(r.stone.id), false, "no owner flag in the public shape");
+  // toggle: only the owner
+  assert.throws(() => S.setVisibility(other, r.stone.id, false), /not_yours/);
+  assert.equal(S.setVisibility(w, r.stone.id, false).stone.private, 0); assert.equal(stoneById(r.stone.id).wish, "kept to myself", "shown to everyone now");
+  assert.equal(S.setVisibility(w, r.stone.id, true).stone.private, 1); assert.equal(stoneById(r.stone.id).wish, null);
+  // a private stone is an ordinary stone: it can be blessed
+  assert.equal(bless(other, r.stone.id, t0).stone.blessings, 1);
+  // a sealed stone is closed
+  const o = await createOrder(w, "mock"); settleOrder(o.id, true);
+  const sealed = addStone(w, { wish: "sealed one", sealed: true }, t0 + 1000);
+  assert.throws(() => bless(other, sealed.stone.id, t0), /sealed/);
+});
+
 test("blessings: free per day then credits, once per stone, never your own, owner is notified", async () => {
   const t0 = 9_000_000;
   const author = createWallet(), fan = createWallet();

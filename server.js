@@ -76,6 +76,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS pending_chain (wish_hash TEXT PRIMARY KEY, w
 try { db.exec("ALTER TABLE pending_chain ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0"); } catch {}
 // Sealed wishes: the text stays private to the owner (costs one stone). Blessings: others send a light to a stone.
 try { db.exec("ALTER TABLE stones ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE stones ADD COLUMN private INTEGER NOT NULL DEFAULT 0"); } catch {}        // free: the text is the owner's alone, the stone is ordinary and can be blessed
+try { db.exec("ALTER TABLE pending_chain ADD COLUMN private INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE stones ADD COLUMN blessings INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE wallets ADD COLUMN bless_day INTEGER NOT NULL DEFAULT 0"); } catch {}   // day index of the free-blessing counter
 try { db.exec("ALTER TABLE wallets ADD COLUMN bless_n INTEGER NOT NULL DEFAULT 0"); } catch {}     // free blessings given on bless_day
@@ -99,7 +101,8 @@ try { db.exec("ALTER TABLE wallets ADD COLUMN seed_z REAL NOT NULL DEFAULT 0"); 
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_kind TEXT NOT NULL DEFAULT 'wildflower'"); } catch {}
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_log TEXT NOT NULL DEFAULT '{}'"); } catch {}          // {"w":[day…],"m":[day…]} waterings and mulches, real day indexes
 const q = {
-  insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
+  insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, private, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+  setPrivate: db.prepare("UPDATE stones SET private = ? WHERE id = ? AND wallet_id = ?"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
   stoneFull: db.prepare("SELECT * FROM stones WHERE id = ?"),
   bless: db.prepare("INSERT OR IGNORE INTO blessings (stone_id, wallet_id, created_at) VALUES (?, ?, ?)"),
@@ -116,9 +119,9 @@ const q = {
   setKeystone: db.prepare("UPDATE stones SET keystone = 1 WHERE id = ?"),
   seenEvent: db.prepare("UPDATE wallets SET seen_event = ? WHERE id = ?"),
   insertBot: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, bot, created_at) VALUES (?, ?, NULL, 0, 1, ?)"),
-  insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, sealed, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)"),
+  insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, sealed, private, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)"),
   byChain: db.prepare("SELECT id FROM stones WHERE chain_id = ?"),
-  pendingPut: db.prepare("INSERT OR REPLACE INTO pending_chain (wish_hash, wish, name, wallet_id, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
+  pendingPut: db.prepare("INSERT OR REPLACE INTO pending_chain (wish_hash, wish, name, wallet_id, sealed, private, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"),
   pendingGet: db.prepare("SELECT * FROM pending_chain WHERE wish_hash = ?"),
   pendingDel: db.prepare("DELETE FROM pending_chain WHERE wish_hash = ?"),
   lastChain: db.prepare("SELECT MAX(chain_id) AS n FROM stones"),
@@ -149,11 +152,11 @@ const q = {
       EXISTS (SELECT 1 FROM visits v WHERE v.wallet_id = w.id AND v.day > (w.created_at / 86400000) AND v.day <= (w.created_at / 86400000) + 7) OR EXISTS (SELECT 1 FROM stones s WHERE s.wallet_id = w.id AND (s.created_at / 86400000) > (w.created_at / 86400000) AND (s.created_at / 86400000) <= (w.created_at / 86400000) + 7) AS d7,
       w.placed > 0 AS activated, EXISTS (SELECT 1 FROM orders o WHERE o.wallet_id = w.id AND o.status = 'PAID') AS paid
     FROM wallets w WHERE w.created_at >= ? AND w.created_at < ?`),
-  recent: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
-  after: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
+  recent: db.prepare("SELECT id, name, wish, sealed, private, blessings, keystone, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
+  after: db.prepare("SELECT id, name, wish, sealed, private, blessings, keystone, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
   today: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE created_at > ?"),
-  one: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones WHERE id = ?"),
+  one: db.prepare("SELECT id, name, wish, sealed, private, blessings, keystone, wallet_id, created_at FROM stones WHERE id = ?"),
   walletByToken: db.prepare("SELECT * FROM wallets WHERE token = ?"),
   walletById: db.prepare("SELECT * FROM wallets WHERE id = ?"),
   newWallet: db.prepare("INSERT INTO wallets (token, created_at) VALUES (?, ?)"),
@@ -170,11 +173,13 @@ const q = {
 };
 
 export const count = () => q.count.get().n;
-/** Public shape of a stone. A sealed wish's text is only returned to its owner; wallet ids never leave the server. */
+/** Public shape of a stone. A sealed or private wish's text is only returned to its owner; wallet ids never leave the server.
+ *  `mine` is set only in replies to the owner (the broadcast shape has no viewer). */
 export function pub(row, viewerId = null) {
   if (!row) return row;
   const { wallet_id, ...s } = row;
-  if (s.sealed && wallet_id !== viewerId) s.wish = null;
+  if ((s.sealed || s.private) && wallet_id !== viewerId) s.wish = null;
+  if (viewerId != null && wallet_id === viewerId) s.mine = 1;
   return s;
 }
 export const recent = (n = 40, viewerId = null) => q.recent.all(Math.min(Math.max(1, n), 200)).reverse().map((r) => pub(r, viewerId));
@@ -187,7 +192,7 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   if (q.byChain.get(tokenId)) return null;
   const p = q.pendingGet.get(wishHash);
   const wish = p?.wish ?? "(a wish sealed on-chain)";
-  const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, at ?? Date.now());
+  const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, p?.private ? 1 : 0, at ?? Date.now());
   if (p) q.pendingDel.run(wishHash);
   if (r.changes === 0) return null;
   if (p?.wallet_id) { q.addKarma.run(1, p.wallet_id); plantSeed(p.wallet_id, p.name, at ?? Date.now()); }
@@ -231,7 +236,7 @@ export function newBlessings(w, now = Date.now()) {
 }
 
 /** Place a stone for a wallet: free if available, else one credit. Sealing (private wish) costs one more credit. Throws 402 need_credits. */
-export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
+export function addStone(wallet, { name, wish, sealed, private: priv }, now = Date.now()) {
   const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim();
   const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
   if (cleanWish.length < 2) throw Object.assign(new Error("too_short"), { status: 400 });
@@ -246,10 +251,21 @@ export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
     paid = 1;
   }
   if (seal && q.spendCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
-  const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, now);
+  const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, priv ? 1 : 0, now);
   plantSeed(wallet.id, cleanName, now); if (cleanName) q.seedName.run(cleanName, wallet.id);
   checkFirmament(Number(r.lastInsertRowid), now);
   return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
+}
+
+/** The owner decides, any time and for free, whether the text of their wish is shown. Sealed stones are already hidden. */
+export function setVisibility(wallet, stoneId, priv) {
+  const st = q.stoneFull.get(Number(stoneId) || 0);
+  if (!st) throw Object.assign(new Error("not_found"), { status: 404 });
+  if (st.wallet_id !== wallet.id) throw Object.assign(new Error("not_yours"), { status: 403 });
+  q.setPrivate.run(priv ? 1 : 0, st.id, wallet.id);
+  const stone = pub(q.one.get(st.id));
+  broadcast({ type: "visibility", id: stone.id, private: stone.private, wish: stone.wish }); // everyone else: text appears or disappears
+  return { stone: pub(q.one.get(st.id), wallet.id) };
 }
 
 // ---------- seeds: a real-data simulation (soil profile × species traits × daily weather), see soil.js ----------
@@ -337,6 +353,7 @@ export function bless(wallet, stoneId, now = Date.now()) {
   const st = q.stoneFull.get(Number(stoneId) || 0);
   if (!st) throw Object.assign(new Error("not_found"), { status: 404 });
   if (st.wallet_id === wallet.id) throw Object.assign(new Error("own_stone"), { status: 400 });
+  if (st.sealed) throw Object.assign(new Error("sealed"), { status: 400 });
   if (q.bless.run(st.id, wallet.id, now).changes === 0) throw Object.assign(new Error("already_blessed"), { status: 409 });
   const w = q.walletById.get(wallet.id), today = dayOf(now), used = w.bless_day === today ? w.bless_n : 0;
   let free = true;
@@ -594,13 +611,13 @@ export const server = http.createServer(async (req, res) => {
       if (!chain()) return json(res, 404, { error: "no_chain" });
       if (limited(ip, "prep", 20)) return json(res, 429, { error: "rate_limited" });
       const [w, setCookie] = wallet(req);
-      const { wish, name, address, wantFree, sealed } = await readBody(req);
+      const { wish, name, address, wantFree, sealed, private: priv } = await readBody(req);
       const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim();
       const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
       if (cleanWish.length < 2 || cleanWish.length > 140 || /https?:\/\/|www\./i.test(cleanWish + cleanName)) return json(res, 400, { error: "rejected" });
       if (!/^0x[0-9a-fA-F]{40}$/.test(String(address ?? ""))) return json(res, 400, { error: "bad_address" });
       const { wishHash, salt } = preparePending(cleanWish);
-      q.pendingPut.run(wishHash, cleanWish, cleanName || null, w.id, sealed ? 1 : 0, Date.now());
+      q.pendingPut.run(wishHash, cleanWish, cleanName || null, w.id, sealed ? 1 : 0, priv ? 1 : 0, Date.now());
       let voucher = null;
       // The daily free stone works on-chain too: consume the web2 free slot and hand back a signed voucher.
       if (wantFree && w.free_at <= Date.now() && q.useFree.run(Date.now() + FREE_EVERY_MS, w.id, Date.now()).changes === 1) voucher = await signVoucher(address);
@@ -634,6 +651,15 @@ export const server = http.createServer(async (req, res) => {
       const [w, setCookie] = wallet(req);
       try { return json(res, 200, bless(w, mb[1]), setCookie ? { "Set-Cookie": setCookie } : {}); }
       catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w), pack: PACK, providers: enabledProviders() }, setCookie ? { "Set-Cookie": setCookie } : {}); }
+    }
+
+    // Show or hide the text of your own wish: POST /api/stones/<id>/visibility { private: true|false }
+    const mv = req.method === "POST" && url.pathname.match(/^\/api\/stones\/(\d+)\/visibility$/);
+    if (mv) {
+      if (limited(ip, "vis", 30)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      try { const b = await readBody(req); return json(res, 200, setVisibility(w, mv[1], !!b.private), setCookie ? { "Set-Cookie": setCookie } : {}); }
+      catch (e) { return json(res, e.status ?? 400, { error: e.message }, setCookie ? { "Set-Cookie": setCookie } : {}); }
     }
 
     // Operator-only: seed stones from tools/seed-users.mjs. Requires ADMIN_TOKEN.
