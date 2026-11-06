@@ -752,7 +752,7 @@ export const server = http.createServer(async (req, res) => {
       try {
         const o = await createOrder(w, provider ?? enabledProviders()[0]);
         return json(res, 200, { orderId: o.id, redirectUrl: o.redirectUrl }, setCookie ? { "Set-Cookie": setCookie } : {});
-      } catch (e) { console.error("buy failed", e); return json(res, e.status ?? 502, { error: e.status ? e.message : "checkout_failed" }); }
+      } catch (e) { console.error("buy failed", e); return json(res, e.status ?? 502, { error: e.status ? e.message : "checkout_failed", detail: e.status ? undefined : String(e.message).slice(0, 300), paypalEnv: process.env.PAYPAL_ENV === "live" ? "live" : "sandbox" }); } // detail never holds a secret: PayPal's status and message only
     }
 
     if (req.method === "GET" && url.pathname === "/api/paypal/return") {
