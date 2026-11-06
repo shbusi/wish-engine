@@ -4,13 +4,14 @@
 // 24h; after that a stone costs one credit. Credits come in packs bought via
 // PayPal (or the dev-only mock provider).
 import http from "node:http";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, createReadStream } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SOILS, SEEDS, STAGES as SEED_STAGE_TABLE, soilAt, inGarden, simulate, weatherOn, unlockedSeeds, MIN_GAP, RADIUS_MIN, RADIUS_MAX, MULCH_DAYS } from "./soil.js";
 import { chain, chainPublic, signVoucher, preparePending, startIndexer } from "./chain-link.js";
+import { playlist as musicPlaylist, ensure as musicEnsure, defaultDir as musicDir } from "./tools/music.mjs";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DB_PATH = process.env.DB_PATH ?? "cairn.db";
@@ -497,12 +498,25 @@ function limited(ip, key = "", max = RATE_PER_MIN) {
 }
 
 // ---------- static files ----------
-const MIME = { ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".hdr": "application/octet-stream", ".glb": "model/gltf-binary", ".ktx2": "image/ktx2" };
+const MIME = { ".ogg": "audio/ogg", ".oga": "audio/ogg", ".opus": "audio/ogg", ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".hdr": "application/octet-stream", ".glb": "model/gltf-binary", ".ktx2": "image/ktx2" };
 const STATIC = [
   { prefix: "/vendor/three/", root: path.join(HERE, "node_modules", "three"), allow: /^(build|examples\/jsm)\// },
   { prefix: "/vendor/ethers/", root: path.join(HERE, "node_modules", "ethers"), allow: /^dist\/ethers\.min\.js$/ },
   { prefix: "/assets/", root: path.join(HERE, "assets"), allow: /^[^.]/ },
 ];
+/** Background music files, streamed with Range support (needed by iOS Safari and for seeking). */
+function serveMusic(req, res, url) {
+  if (!url.pathname.startsWith("/music/")) return false;
+  const name = decodeURIComponent(url.pathname.slice(7));
+  if (!/^[\w.-]+$/.test(name) || !musicPlaylist().some((t) => t.file === name)) { res.writeHead(404); res.end(); return true; }
+  const file = path.join(musicDir(), name); let size; try { size = statSync(file).size; } catch { res.writeHead(404); res.end(); return true; }
+  const type = MIME[path.extname(name)] ?? "application/octet-stream", m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+  let start = 0, end = size - 1;
+  if (m) { if (m[1]) start = Number(m[1]); if (m[2]) end = Number(m[2]); if (!m[1] && m[2]) { start = size - Number(m[2]); end = size - 1; } if (start > end || end >= size) { res.writeHead(416, { "Content-Range": `bytes */${size}` }); res.end(); return true; } }
+  res.writeHead(m ? 206 : 200, { "Content-Type": type, "Content-Length": end - start + 1, "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=31536000, immutable", ...(m ? { "Content-Range": `bytes ${start}-${end}/${size}` } : {}) });
+  if (req.method === "HEAD") return res.end(), true;
+  createReadStream(file, { start, end }).pipe(res); return true;
+}
 function serveStatic(req, res, url) {
   for (const s of STATIC) {
     if (!url.pathname.startsWith(s.prefix)) continue;
@@ -603,6 +617,8 @@ export const server = http.createServer(async (req, res) => {
   const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress || "?";
   try {
     if (req.method === "GET" && serveStatic(req, res, url)) return;
+    if ((req.method === "GET" || req.method === "HEAD") && serveMusic(req, res, url)) return;
+    if (req.method === "GET" && url.pathname === "/api/music") return json(res, 200, { tracks: musicPlaylist().map((t) => ({ ...t, url: `/music/${t.file}` })) }, { "Cache-Control": "public, max-age=300" });
 
     if (req.method === "GET" && url.pathname === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
@@ -790,6 +806,8 @@ export const server = http.createServer(async (req, res) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   server.listen(PORT, () => {
     console.log(`Wish Cairn · ${APP_URL()} · ${count()} stones · providers: ${enabledProviders().join(",") || "none"} · chain: ${chain() ? chain().network : "off"}`);
+    // Background music: fetch any missing public-domain recordings into the music dir (MUSIC_AUTOFETCH=0 to skip)
+    if (process.env.MUSIC_AUTOFETCH !== "0") { let tries = 0; const fetchMusic = () => musicEnsure().then((r) => { console.log(`music: ${r.done.length} tracks ready${r.failed.length ? `, ${r.failed.length} failed` : ""} · ${r.dir}`); if (r.failed.length && ++tries < 24) setTimeout(fetchMusic, 10 * 60_000); }).catch((e) => console.error("music fetch failed:", e.message)); fetchMusic(); } // Wikimedia throttles bursts: keep trying every 10 minutes for a few hours
     // Telegram investor bot (invest-bot.js): on when TELEGRAM_BOT_TOKEN is set
     if (process.env.TELEGRAM_BOT_TOKEN) import("./invest-bot.js").then((m) => m.start()).catch((e) => console.error("invest bot failed to start:", e.message));
     // X autopost: X_AUTOPOST=HH:MM (UTC) runs tools/post-x.mjs once a day with the X_* keys from the environment.

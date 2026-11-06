@@ -301,6 +301,22 @@ web2 or on-chain, both sides receive `INVITE_REWARD` stones (default 1) and the 
 `INVITE_DAILY_CAP` (20) rewarded friends per inviter per day. The inviter is told on their next visit, and the
 analytics funnel shows how many new wallets came through invite links and how many of them stacked.
 
+## Background music and nameplates
+
+**Music.** Ten calm Mozart movements (about 70 minutes) play in order, fading in after the visitor's first tap (browsers
+block sound before a gesture), with a small caption naming the piece and the performers; the 🎵 button or the M key
+turns it off and the choice is remembered. The recordings are public-domain or Creative Commons performances from
+Wikimedia Commons, listed with licence and source in `tools/music-sources.json` (Musopen String Quartet and Musopen,
+public domain; Fulda Symphonic Orchestra, CC0; the Al Goldstein / Pandora Music collection, CC BY-SA 2.0, credited in
+the caption). The files are not committed: the server downloads any that are missing into `MUSIC_DIR` (default
+`/data/music` when the database lives under `/data`, else `assets/music`) at boot and retries every ten minutes while
+Wikimedia throttles; `node tools/music.mjs` does the same by hand, `MUSIC_AUTOFETCH=0` turns it off. `GET /api/music`
+lists what is present; `/music/<file>` streams it with Range support (iOS needs it).
+
+**Nameplates.** Every named stone carries a small brass plate with its name on its outer edge, always turned to the
+camera, so names read at a glance without tapping; the engraving stays as the stone's own mark. Plates hide in the
+garden, from straight above, and when the camera is far away.
+
 ## Stream background: `?ambient=1`
 
 For streamers and OBS: `https://<site>/?ambient=1&ref=<creator>` shows only the tower (no panels, no buttons), rotates
