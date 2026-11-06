@@ -275,6 +275,13 @@ ffmpeg. Dropped stones exist only in the capture; nothing is written to the serv
 (`npm i -D playwright && npx playwright install chromium`). About 0.7 s per frame on a CPU renderer, so an 18 s
 clip takes 4–5 minutes; `--lang ko` for Korean HUD text.
 
+## Camera views
+
+Wheel or pinch zoom is kept as a multiplier on the automatic camera distance, so it survives the tower growing and new
+stones landing; drag orbits; double-click on the sky resets. The 📷 button (or the V key) cycles presets: auto,
+close, wide, from below, sky. `?view=<name>` opens in one of them, which is how a stream background picks its angle
+(`?ambient=1&view=low`).
+
 ## Invitations
 
 Every wallet has a six-character invite code (`walletState.invite`). "Invite a friend" shares `/?i=<code>`, and the
