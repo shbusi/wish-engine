@@ -273,6 +273,10 @@ export const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(page("invest.html"));
     }
+    if (url.pathname === "/wallet.js") {
+      res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-cache" });
+      return res.end(page("wallet.js"));
+    }
 
     if (req.method === "GET" && url.pathname === "/api/me") {
       const [w, setCookie] = wallet(req);

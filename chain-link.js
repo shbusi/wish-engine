@@ -6,7 +6,16 @@ import { ethers } from "ethers";
 
 let cfg = null;
 try { if (process.env.CHAIN_DEPLOYMENT) cfg = JSON.parse(readFileSync(process.env.CHAIN_DEPLOYMENT, "utf8")); } catch (e) { console.error("chain config unreadable:", e.message); }
-if (cfg) cfg.rpcUrl = process.env.CHAIN_RPC_URL ?? (cfg.network === "base" ? "https://mainnet.base.org" : cfg.network === "baseSepolia" ? "https://sepolia.base.org" : "http://127.0.0.1:8545");
+const NETS = {
+  base: { chainName: "Base", rpc: "https://mainnet.base.org", explorer: "https://basescan.org" },
+  baseSepolia: { chainName: "Base Sepolia", rpc: "https://sepolia.base.org", explorer: "https://sepolia.basescan.org" },
+  localhost: { chainName: "Hardhat (local)", rpc: "http://127.0.0.1:8545", explorer: "" },
+};
+if (cfg) {
+  const n = NETS[cfg.network] ?? NETS.localhost;
+  cfg.rpcUrl = process.env.CHAIN_RPC_URL ?? n.rpc;
+  cfg.chainName = n.chainName; cfg.explorer = process.env.CHAIN_EXPLORER ?? n.explorer;
+}
 
 export const ABI = [
   "event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free, address token, uint256 amount)",
@@ -29,7 +38,7 @@ export const chain = () => cfg;
 /** What the page needs: addresses, chain id, rpc, price. Never the signer key. */
 export function chainPublic() {
   if (!cfg) return null;
-  return { network: cfg.network, chainId: cfg.chainId, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, revenueShare: cfg.revenueShare, revenueBps: cfg.revenueBps, stables: cfg.stables ?? [{ symbol: "USDC", address: cfg.usdc, decimals: 6, price: cfg.stonePrice }], token: cfg.token, sale: cfg.sale, abi: ABI, shareAbi: SHARE_ABI, erc20Abi: ERC20_ABI };
+  return { network: cfg.network, chainId: cfg.chainId, chainName: cfg.chainName, explorer: cfg.explorer, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, revenueShare: cfg.revenueShare, revenueBps: cfg.revenueBps, stables: cfg.stables ?? [{ symbol: "USDC", address: cfg.usdc, decimals: 6, price: cfg.stonePrice }], token: cfg.token, sale: cfg.sale, abi: ABI, shareAbi: SHARE_ABI, erc20Abi: ERC20_ABI };
 }
 
 /** keccak256(wish|salt): the chain sees the hash, the server keeps the text. */

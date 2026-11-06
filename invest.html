@@ -85,8 +85,8 @@
 
 <script type="module">
 const T = {
-  en: { sub:"Invest · stake CAIRN, earn the tower's revenue", back:"← Tower", connect:"Connect wallet", connected:(a)=>a, height:"Tower height", distributed:"Distributed to stakers (lifetime)", totalStaked:"Total staked", noWallet:"Connect a wallet to see your position. Revenue is paid in the stablecoins stones were bought with (USDC, EURC, JPYC, BRZ …), pro-rata to staked CAIRN.", yourPosition:"Your position", cairnWallet:"CAIRN in wallet", cairnStaked:"CAIRN staked", stake:"Stake", unstake:"Unstake", max:"Max", claimable:"Claimable revenue", claimAll:"Claim all", coin:"Coin", yours:"Yours", lifetime:"Lifetime distributed", sale:"Public sale", buy:"Buy CAIRN", claimTokens:"Claim tokens", refund:"Refund", stones:(n)=>`${n.toLocaleString()} stones`, split:(b)=>`${b/100}% of every stone goes to stakers`, share:(p)=>`your share ${p}%`, confirm:"Confirm in your wallet…", done:"Done", failed:"Transaction failed", noChain:"The on-chain layer is not configured on this server.", wrongChain:"Please switch your wallet to the right network", open:"Open", closed:"Closed", upcoming:"Starts", ended:"Ended", raised:(r,s,h)=>`raised $${r} · soft cap $${s} · hard cap $${h}`, endsIn:(t)=>`ends in ${t}`, startsIn:(t)=>`starts in ${t}`, quote:(n)=>`≈ ${n} CAIRN`, carried:"Revenue that arrived while nobody was staked is held and paid out with the next distribution.", success:"Sale succeeded — claim your tokens.", refunding:"Soft cap missed — refunds are open." },
-  ko: { sub:"투자 · CAIRN을 스테이킹하고 탑의 매출을 받으세요", back:"← 탑으로", connect:"지갑 연결", connected:(a)=>a, height:"탑 높이", distributed:"스테이커 누적 분배", totalStaked:"총 스테이킹", noWallet:"지갑을 연결하면 내 포지션이 보입니다. 매출은 돌을 산 스테이블코인(USDC·EURC·JPYC·BRZ…) 그대로, 스테이킹 비율대로 분배됩니다.", yourPosition:"내 포지션", cairnWallet:"지갑의 CAIRN", cairnStaked:"스테이킹한 CAIRN", stake:"스테이킹", unstake:"해제", max:"최대", claimable:"청구 가능 매출", claimAll:"모두 청구", coin:"코인", yours:"내 몫", lifetime:"누적 분배", sale:"공개 세일", buy:"CAIRN 구매", claimTokens:"토큰 받기", refund:"환불", stones:(n)=>`돌 ${n.toLocaleString()}개`, split:(b)=>`돌 매출의 ${b/100}%가 스테이커에게`, share:(p)=>`내 지분 ${p}%`, confirm:"지갑에서 확인해주세요…", done:"완료", failed:"트랜잭션 실패", noChain:"이 서버에는 온체인 설정이 없습니다.", wrongChain:"지갑 네트워크를 바꿔주세요", open:"진행 중", closed:"종료", upcoming:"예정", ended:"마감", raised:(r,s,h)=>`모금 $${r} · 소프트캡 $${s} · 하드캡 $${h}`, endsIn:(t)=>`${t} 후 마감`, startsIn:(t)=>`${t} 후 시작`, quote:(n)=>`≈ ${n} CAIRN`, carried:"스테이커가 없을 때 들어온 매출은 보관됐다가 다음 분배에 합산됩니다.", success:"세일 성공 — 토큰을 받아가세요.", refunding:"소프트캡 미달 — 환불이 열렸습니다." },
+  en: { sub:"Invest · stake CAIRN, earn the tower's revenue", back:"← Tower", connect:"Connect wallet", connected:(a)=>a, height:"Tower height", distributed:"Distributed to stakers (lifetime)", totalStaked:"Total staked", noWallet:"Connect a wallet to see your position. Revenue is paid in the stablecoins stones were bought with (USDC, EURC, JPYC, BRZ …), pro-rata to staked CAIRN.", yourPosition:"Your position", cairnWallet:"CAIRN in wallet", cairnStaked:"CAIRN staked", stake:"Stake", unstake:"Unstake", max:"Max", claimable:"Claimable revenue", claimAll:"Claim all", coin:"Coin", yours:"Yours", lifetime:"Lifetime distributed", sale:"Public sale", buy:"Buy CAIRN", claimTokens:"Claim tokens", refund:"Refund", stones:(n)=>`${n.toLocaleString()} stones`, split:(b)=>`${b/100}% of every stone goes to stakers`, share:(p)=>`your share ${p}%`, confirm:"Confirm in your wallet…", done:"Done", failed:"Transaction failed", noChain:"The on-chain layer is not configured on this server.", wrongChain:"Please switch your wallet to the right network", noWallet2:"No wallet found.", getWallet:"Get a wallet", openIn:"Open this page in a wallet app:", pickWallet:"Choose a wallet", cancel:"Cancel", rejected:"Connection was rejected in the wallet", view:"view", open:"Open", closed:"Closed", upcoming:"Starts", ended:"Ended", raised:(r,s,h)=>`raised $${r} · soft cap $${s} · hard cap $${h}`, endsIn:(t)=>`ends in ${t}`, startsIn:(t)=>`starts in ${t}`, quote:(n)=>`≈ ${n} CAIRN`, carried:"Revenue that arrived while nobody was staked is held and paid out with the next distribution.", success:"Sale succeeded — claim your tokens.", refunding:"Soft cap missed — refunds are open." },
+  ko: { sub:"투자 · CAIRN을 스테이킹하고 탑의 매출을 받으세요", back:"← 탑으로", connect:"지갑 연결", connected:(a)=>a, height:"탑 높이", distributed:"스테이커 누적 분배", totalStaked:"총 스테이킹", noWallet:"지갑을 연결하면 내 포지션이 보입니다. 매출은 돌을 산 스테이블코인(USDC·EURC·JPYC·BRZ…) 그대로, 스테이킹 비율대로 분배됩니다.", yourPosition:"내 포지션", cairnWallet:"지갑의 CAIRN", cairnStaked:"스테이킹한 CAIRN", stake:"스테이킹", unstake:"해제", max:"최대", claimable:"청구 가능 매출", claimAll:"모두 청구", coin:"코인", yours:"내 몫", lifetime:"누적 분배", sale:"공개 세일", buy:"CAIRN 구매", claimTokens:"토큰 받기", refund:"환불", stones:(n)=>`돌 ${n.toLocaleString()}개`, split:(b)=>`돌 매출의 ${b/100}%가 스테이커에게`, share:(p)=>`내 지분 ${p}%`, confirm:"지갑에서 확인해주세요…", done:"완료", failed:"트랜잭션 실패", noChain:"이 서버에는 온체인 설정이 없습니다.", wrongChain:"지갑 네트워크를 바꿔주세요", noWallet2:"지갑이 없어요.", getWallet:"지갑 받기", openIn:"이 페이지를 지갑 앱에서 열기:", pickWallet:"지갑을 고르세요", cancel:"취소", rejected:"지갑에서 연결을 거절했어요", view:"보기", open:"진행 중", closed:"종료", upcoming:"예정", ended:"마감", raised:(r,s,h)=>`모금 $${r} · 소프트캡 $${s} · 하드캡 $${h}`, endsIn:(t)=>`${t} 후 마감`, startsIn:(t)=>`${t} 후 시작`, quote:(n)=>`≈ ${n} CAIRN`, carried:"스테이커가 없을 때 들어온 매출은 보관됐다가 다음 분배에 합산됩니다.", success:"세일 성공 — 토큰을 받아가세요.", refunding:"소프트캡 미달 — 환불이 열렸습니다." },
 };
 const L = new URLSearchParams(location.search).get("lang") === "ko" ? "ko" : "en";
 const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
@@ -97,6 +97,7 @@ const fmt = (v, d = 2) => Number(v).toLocaleString(undefined, { maximumFractionD
 const dur = (s) => { s = Math.max(0, s); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
 
 const { ethers } = await import("/vendor/ethers/dist/ethers.min.js");
+const W = await import("/wallet.js");
 const me = await fetch("/api/me").then((r) => r.json());
 const cfg = me.chain;
 if (!cfg) { $("noWallet").innerHTML = `<p class="muted">${t("noChain")}</p>`; $("connect").disabled = true; }
@@ -160,19 +161,33 @@ async function refreshMine() {
   window.__pos = { bal, staked };
 }
 
-async function connect() {
-  if (!cfg || !window.ethereum) return;
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const [a] = await provider.send("eth_requestAccounts", []);
-  const net = await provider.getNetwork();
-  if (Number(net.chainId) !== cfg.chainId) { try { await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x" + cfg.chainId.toString(16) }] }); } catch { $("msg").textContent = t("wrongChain"); return; } }
-  signer = await provider.getSigner(); addr = ethers.getAddress(a);
-  $("connect").textContent = addr.slice(0, 6) + "…" + addr.slice(-4); $("addr").textContent = addr.slice(0, 10) + "…";
+let offChange = null;
+const walletError = (e) => ({ no_wallet: t("noWallet2"), rejected: t("rejected"), wrong_chain: t("wrongChain"), cancelled: "" }[e.message] ?? `${t("failed")}: ${(e.shortMessage || e.message || "").slice(0, 120)}`);
+async function useWallet(w) {
+  offChange?.(); offChange = null;
+  const provider = new ethers.BrowserProvider(w.provider);
+  signer = await provider.getSigner(); addr = ethers.getAddress(w.address);
+  $("connect").textContent = W.short(addr); $("addr").textContent = addr.slice(0, 10) + "…";
+  offChange = W.onChange(w.provider, ({ accounts, chainId }) => {
+    if (accounts && !accounts.length) { signer = null; addr = null; $("connect").textContent = t("connect"); $("position").style.display = $("rewards").style.display = "none"; $("noWallet").style.display = ""; return; }
+    if (chainId !== undefined && chainId !== cfg.chainId) { $("msg").textContent = t("wrongChain"); return; }
+    connect().catch(() => {});
+  });
   await Promise.all([refreshMine(), refreshSale()]);
+}
+async function connect() {
+  if (!cfg) return;
+  try { await useWallet(await W.connect(cfg, { title: t("pickWallet"), cancel: t("cancel") })); }
+  catch (e) {
+    if (e.message !== "no_wallet") { $("msg").textContent = walletError(e); $("noWallet").querySelector("p").textContent = walletError(e) || t("noWallet"); return; }
+    $("noWallet").querySelector("p").innerHTML = W.isMobile()
+      ? `${t("openIn")} ${W.deepLinks().map((l) => `<a href="${l.href}">${l.name}</a>`).join(" · ")}`
+      : `${t("noWallet2")} <a href="https://metamask.io/download/" target="_blank" rel="noopener">${t("getWallet")}</a>`;
+  }
 }
 async function tx(label, fn, msgEl = $("msg")) {
   msgEl.textContent = t("confirm");
-  try { const r = await fn(); await r.wait(); msgEl.textContent = `${t("done")} · ${label}`; await Promise.all([refreshPublic(), refreshMine(), refreshSale()]); }
+  try { const r = await fn(); await r.wait(); const link = W.explorerTx(cfg, r.hash); msgEl.innerHTML = `${t("done")} · ${label}${link ? ` · <a href="${link}" target="_blank" rel="noopener">${t("view")}</a>` : ""}`; await Promise.all([refreshPublic(), refreshMine(), refreshSale()]); }
   catch (e) { console.error(e); msgEl.textContent = `${t("failed")}: ${(e.shortMessage || e.message || "").slice(0, 120)}`; }
 }
 const amountWei = () => ethers.parseUnits(String($("amount").value || "0"), 18);
@@ -195,6 +210,7 @@ $("claimTokens").addEventListener("click", () => tx("claim tokens", () => new et
 $("refund").addEventListener("click", () => tx("refund", () => new ethers.Contract(cfg.sale, SALE_ABI, signer).refund(), $("saleMsg")));
 
 await Promise.all([refreshPublic(), refreshSale()]);
+if (cfg) { const again = await W.silent(cfg); if (again) useWallet(again).catch(() => {}); }
 setInterval(() => { refreshPublic(); refreshMine(); }, 15000);
 </script>
 </body>

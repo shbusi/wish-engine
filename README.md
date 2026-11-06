@@ -65,7 +65,7 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 
 ## On-chain layer (Base L2): stone NFTs, CAIRN token, public sale
 
-`chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 10 tests, compiles offline).
+`chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 13 tests, compiles offline).
 
 - **StoneCairn** (ERC-721): every stone is an NFT. `stackWith(token, …)` pays in any whitelisted stablecoin
   (USDC, EURC, JPYC, BRZ … each with its own price), split 50/50 between the treasury and **RevenueShare**.
@@ -88,6 +88,13 @@ Server side (`chain-link.js`): set `CHAIN_DEPLOYMENT=chain/deployments/base.json
 exposes the chain config on `/api/me`, registers wish text + salt for a hash on `POST /api/chain/prepare`, and
 indexes `Stacked` events so on-chain stones land on the same tower. In the page, "Stack on-chain" connects a
 wallet (ethers v6) and calls `stackFree` with a voucher or approves USDC and calls `stack`.
+
+**Wallets (`wallet.js`, shared by both pages)**: finds every installed wallet through EIP-6963 (MetaMask, Rabby,
+Coinbase Wallet, Trust, OKX, Phantom …) with a picker when several are installed and a remembered choice;
+switches the wallet to Base and *adds the network* if the wallet has never seen it; reconnects silently on the
+next visit (never switching chains behind the user's back); follows account and network changes; shows explorer
+links for transactions. Without an injected wallet, phones get "open in MetaMask / Coinbase Wallet / Trust"
+deep links and desktops a link to install one. No wallet SDK, no project id, no build step.
 
 ## Virtual early users (seeding)
 
