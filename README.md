@@ -65,6 +65,15 @@ The on-chain half is an operator step, because the community allocation is a wal
 on-chain stone stacked before the touch; run again with `COMMUNITY_KEY` to send that many CAIRN to each (one share
 per wallet), with a resumable log in `out/`.
 
+### The moon and the sun
+
+Both are tied to height. In the meadow the moon sits below the hills; above the trees it peeks over them, large
+and low on the left; above the clouds it is up, and on the right a sun the ground never sees rises just over the
+cloud sea, with a warm band along its horizon and a warm side light on the stones. Drifting cloud puffs ring the
+tower at that height so the two show between them. Under the firmament both dim to a shimmer through the water.
+The camera tilts up a little in those bands so the sky is in frame, and entering a band shows a one-line toast
+("Above the clouds: the moon comes out, and a sun the ground never sees").
+
 ## The climb: the world changes with height
 
 Height is the tower's cumulative height (stones × 9 cm), so the scene can rise even though only the newest
