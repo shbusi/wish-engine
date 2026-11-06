@@ -6,7 +6,37 @@
     "normal": "/assets/stone_normal.jpg",
     "roughness": "/assets/stone_roughness.jpg",
     "model": null,
-    "repeat": 0.55
+    "repeat": 0.55,
+    "variants": {
+      "tan": {
+        "albedo": "/assets/stone_tan.jpg",
+        "normal": "/assets/stone_tan_normal.jpg"
+      },
+      "grey": {
+        "albedo": "/assets/stone_grey.jpg",
+        "normal": "/assets/stone_grey_normal.jpg"
+      },
+      "basalt": {
+        "albedo": "/assets/stone_basalt.jpg",
+        "normal": "/assets/stone_basalt_normal.jpg"
+      },
+      "moss": {
+        "albedo": "/assets/stone_moss.jpg",
+        "normal": "/assets/stone_moss_normal.jpg"
+      }
+    }
   },
-  "skyboxVisible": false
+  "skyboxVisible": false,
+  "ground": {
+    "albedo": "/assets/ground_albedo.jpg",
+    "normal": "/assets/ground_normal.jpg"
+  },
+  "skies": [
+    "/assets/sky_0.jpg",
+    "/assets/sky_1.jpg",
+    "/assets/sky_2.jpg",
+    "/assets/sky_3.jpg",
+    "/assets/sky_4.jpg",
+    "/assets/sky_5.jpg"
+  ]
 }
