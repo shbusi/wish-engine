@@ -38,6 +38,25 @@ share cards carry "Under the Firmament", and the sky shows it from the ground: a
 upper waters at the zenith even in the meadow, a water ceiling that hangs high over a small tower and comes
 down to just overhead as the tower climbs, drops falling past the stones only in the last band.
 
+### The touch: when the tower reaches the firmament
+
+Once, ever, when the tower's height passes `FIRMAMENT_M` (250 m ≈ 2,778 stones), the server fires the `firmament`
+event: the stone that crossed the line becomes the **keystone** (a wave mark engraved beside its name, named in its
+tooltip), every wallet that has ever placed a stone receives `FIRMAMENT_REWARD` stone credits (1) "from the waters
+above", and the keystone's wallet receives `FIRMAMENT_KEYSTONE_REWARD` more (10). Everyone watching sees the
+ceremony live over SSE: the water ceiling surges, a pillar of light comes down onto the keystone, every stone lights
+up from the bottom, drops pour, and the title appears for nine seconds. Wallets that were away are told on their
+next visit ("🌊 The waters above give you 1 stone"), once. After the touch the world has a sixth band, **the
+waters above** (from 1.6 × the firmament height): the tower climbs inside the upper sea.
+
+Preview without waiting: `/?ceremony=1` plays it on the current tower; `tools/make-video.mjs --ceremony` renders
+it into a clip. Unit test: `test-firmament.js` (uses a 4-stone firmament).
+
+The on-chain half is an operator step, because the community allocation is a wallet, not a contract rule:
+`tools/firmament-airdrop.mjs --amount 100 --until <keystone chain id> --dry-run` lists every wallet that owns an
+on-chain stone stacked before the touch; run again with `COMMUNITY_KEY` to send that many CAIRN to each (one share
+per wallet), with a resumable log in `out/`.
+
 ## The climb: the world changes with height
 
 Height is the tower's cumulative height (stones × 9 cm), so the scene can rise even though only the newest

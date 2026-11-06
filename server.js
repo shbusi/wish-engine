@@ -19,7 +19,12 @@ const APP_URL = () => process.env.APP_URL ?? `http://localhost:${PORT}`;
 export const STONE_CM = Number(process.env.STONE_CM ?? 9);          // how much one stone lifts the tower
 export const FREE_EVERY_MS = Number(process.env.FREE_EVERY_HOURS ?? 24) * 3_600_000;
 export const PACK = { stones: Number(process.env.PACK_STONES ?? 10), usd: process.env.PACK_PRICE_USD ?? "0.99" };
-export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3); // blessings a wallet may give per day before they cost a stone
+export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3);
+// The firmament: when the tower reaches FIRMAMENT_M metres, everyone who has placed a stone receives FIRMAMENT_REWARD
+// stone credits "from the waters above", and the wallet whose stone touched it gets FIRMAMENT_KEYSTONE_REWARD.
+export const FIRMAMENT_M = Number(process.env.FIRMAMENT_M ?? 250);
+export const FIRMAMENT_REWARD = Number(process.env.FIRMAMENT_REWARD ?? 1);
+export const FIRMAMENT_KEYSTONE_REWARD = Number(process.env.FIRMAMENT_KEYSTONE_REWARD ?? 10); // blessings a wallet may give per day before they cost a stone
 const PROVIDERS = (process.env.PAYMENT_PROVIDERS ?? (process.env.PAYPAL_CLIENT_ID ? "paypal" : "mock")).split(",").map((s) => s.trim()).filter(Boolean);
 const MOCK_OK = process.env.NODE_ENV !== "production" || process.env.ALLOW_MOCK_PAYMENTS === "1";
 
@@ -71,6 +76,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS blessings (stone_id INTEGER NOT NULL, wallet
 // Visits: one row per page load (client-generated id), with source and time on page. Feeds /api/analytics.
 db.exec(`CREATE TABLE IF NOT EXISTS visits (id TEXT PRIMARY KEY, wallet_id INTEGER, day INTEGER NOT NULL, source TEXT, path TEXT, lang TEXT, seconds INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`);
 db.exec("CREATE INDEX IF NOT EXISTS visits_day ON visits(day)");
+// One-off world events (the firmament touch) and who has been told about them
+db.exec(`CREATE TABLE IF NOT EXISTS events (type TEXT PRIMARY KEY, at INTEGER NOT NULL, total INTEGER NOT NULL, stone_id INTEGER, wallets INTEGER NOT NULL DEFAULT 0, credits INTEGER NOT NULL DEFAULT 0)`);
+try { db.exec("ALTER TABLE stones ADD COLUMN keystone INTEGER NOT NULL DEFAULT 0"); } catch {}   // the stone that touched the firmament
+try { db.exec("ALTER TABLE wallets ADD COLUMN seen_event INTEGER NOT NULL DEFAULT 0"); } catch {}
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
@@ -82,6 +91,12 @@ const q = {
   blessedByMe: db.prepare("SELECT stone_id FROM blessings WHERE wallet_id = ? ORDER BY created_at DESC LIMIT 500"),
   myBlessings: db.prepare("SELECT COUNT(*) AS n FROM blessings b JOIN stones s ON s.id = b.stone_id WHERE s.wallet_id = ? AND b.created_at > ?"),
   seenBless: db.prepare("UPDATE wallets SET seen_bless = ? WHERE id = ?"),
+  eventGet: db.prepare("SELECT * FROM events WHERE type = ?"),
+  eventPut: db.prepare("INSERT OR IGNORE INTO events (type, at, total, stone_id, wallets, credits) VALUES (?, ?, ?, ?, ?, ?)"),
+  rewardAll: db.prepare("UPDATE wallets SET credits = credits + ? WHERE placed >= 1"),
+  rewardOne: db.prepare("UPDATE wallets SET credits = credits + ? WHERE id = ?"),
+  setKeystone: db.prepare("UPDATE stones SET keystone = 1 WHERE id = ?"),
+  seenEvent: db.prepare("UPDATE wallets SET seen_event = ? WHERE id = ?"),
   insertBot: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, bot, created_at) VALUES (?, ?, NULL, 0, 1, ?)"),
   insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, sealed, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)"),
   byChain: db.prepare("SELECT id FROM stones WHERE chain_id = ?"),
@@ -109,11 +124,11 @@ const q = {
       EXISTS (SELECT 1 FROM visits v WHERE v.wallet_id = w.id AND v.day > (w.created_at / 86400000) AND v.day <= (w.created_at / 86400000) + 7) OR EXISTS (SELECT 1 FROM stones s WHERE s.wallet_id = w.id AND (s.created_at / 86400000) > (w.created_at / 86400000) AND (s.created_at / 86400000) <= (w.created_at / 86400000) + 7) AS d7,
       w.placed > 0 AS activated, EXISTS (SELECT 1 FROM orders o WHERE o.wallet_id = w.id AND o.status = 'PAID') AS paid
     FROM wallets w WHERE w.created_at >= ? AND w.created_at < ?`),
-  recent: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
-  after: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
+  recent: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
+  after: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
   today: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE created_at > ?"),
-  one: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id = ?"),
+  one: db.prepare("SELECT id, name, wish, sealed, blessings, keystone, wallet_id, created_at FROM stones WHERE id = ?"),
   walletByToken: db.prepare("SELECT * FROM wallets WHERE token = ?"),
   walletById: db.prepare("SELECT * FROM wallets WHERE id = ?"),
   newWallet: db.prepare("INSERT INTO wallets (token, created_at) VALUES (?, ?)"),
@@ -149,6 +164,7 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   if (r.changes === 0) return null;
   const stone = pub(q.one.get(Number(r.lastInsertRowid)));
   broadcast({ type: "stone", stone, ...stats() });
+  checkFirmament(stone.id);
   return stone;
 }
 export const lastChainId = () => q.lastChain.get().n ?? 0;
@@ -159,6 +175,7 @@ export function addSeedStone({ name, wish, createdAt }) {
   const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
   if (cleanWish.length < 2) throw Object.assign(new Error("too_short"), { status: 400 });
   const r = q.insertBot.run(cleanName || null, cleanWish, Number(createdAt) || Date.now());
+  checkFirmament(Number(r.lastInsertRowid));
   return pub(q.one.get(Number(r.lastInsertRowid)));
 }
 
@@ -199,7 +216,32 @@ export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
   }
   if (seal && q.spendCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
   const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, now);
+  checkFirmament(Number(r.lastInsertRowid), now);
   return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
+}
+
+/** The moment the tower reaches the firmament: once, ever. Rewards everyone who has stacked, marks the keystone. */
+export const firmamentStones = () => Math.ceil(FIRMAMENT_M * 100 / STONE_CM);
+export function checkFirmament(stoneId, now = Date.now()) {
+  if (q.eventGet.get("firmament")) return null;
+  const total = count(); if (total < firmamentStones()) return null;
+  const st = q.stoneFull.get(stoneId); if (!st) return null;
+  q.setKeystone.run(st.id);
+  const wallets = q.rewardAll.run(FIRMAMENT_REWARD).changes;
+  if (st.wallet_id) q.rewardOne.run(FIRMAMENT_KEYSTONE_REWARD, st.wallet_id);
+  q.eventPut.run("firmament", now, total, st.id, wallets, FIRMAMENT_REWARD);
+  const ev = { type: "firmament", at: now, total, stone: pub(q.one.get(st.id)), wallets, reward: FIRMAMENT_REWARD, keystoneReward: FIRMAMENT_KEYSTONE_REWARD };
+  broadcast(ev); console.log(`🌊 the tower touched the firmament: ${total} stones, ${wallets} wishers rewarded`);
+  return ev;
+}
+/** What a wallet has not yet been told: its gift from the firmament. Marks it seen. */
+export function pendingEventReward(w, now = Date.now()) {
+  const ev = q.eventGet.get("firmament"); if (!ev) return null;
+  const fresh = q.walletById.get(w.id); if (fresh.seen_event >= ev.at) return null;
+  q.seenEvent.run(Math.max(now, ev.at), fresh.id);
+  const eligible = fresh.placed >= 1 && fresh.created_at < ev.at;
+  const keystone = q.stoneFull.get(ev.stone_id)?.wallet_id === fresh.id;
+  return { type: "firmament", at: ev.at, credits: eligible ? FIRMAMENT_REWARD + (keystone ? FIRMAMENT_KEYSTONE_REWARD : 0) : 0, keystone };
 }
 
 /** Send a light to someone else's stone. FREE_BLESS_PER_DAY are free each day, then one credit each. Once per stone per wallet. */
@@ -385,7 +427,7 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   analyticsCache.set(key, { at: now, v });
   return v;
 }
-const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM });
+const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
 
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -433,7 +475,7 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/me") {
       const [w, setCookie] = wallet(req);
-      return json(res, 200, { wallet: walletState(w), newBlessings: newBlessings(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
+      return json(res, 200, { wallet: walletState(w), newBlessings: newBlessings(w), eventReward: pendingEventReward(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
     }
 
     // ---- on-chain stacking: register the wish text (only its hash goes on-chain), get a free-stone voucher

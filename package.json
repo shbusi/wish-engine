@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node --no-warnings server.js",
-    "test": "node --no-warnings --test test.js"
+    "test": "node --no-warnings --test test.js test-firmament.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

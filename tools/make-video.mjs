@@ -3,6 +3,7 @@
 //
 //   node tools/make-video.mjs --url http://localhost:3000 --names "Sora,Minjun,Aroha,Diego,Yuki,Amara" \
 //        --seconds 18 --fps 24 --caption "wishcairn.app" --sub "a tower to the firmament" --out out/tower.mp4
+//   add --ceremony to play the firmament touch (pillar of light, surging waters, every stone lit) in the last 10 seconds
 //
 // How: opens the tower page in headless Chromium with ?video=1 (the page stops animating on its own and exposes
 // window.__video), steps the simulation one frame at a time, screenshots every frame and pipes them into ffmpeg.
@@ -18,6 +19,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const URL_ = arg("url", "http://localhost:3000"), NAMES = arg("names", "Sora,Minjun,Aroha,Diego,Yuki,Amara,Leila,Noah").split(",").map((s) => s.trim()).filter(Boolean);
 const SECONDS = Number(arg("seconds", 18)), FPS = Number(arg("fps", 24)), OUT = arg("out", "out/tower.mp4"), LANG = arg("lang", "en");
 const CAPTION = arg("caption", ""), SUB = arg("sub", ""), W = Number(arg("width", 540)), H = Number(arg("height", 960)), DPR = Number(arg("dpr", 2));
+const CEREMONY = process.argv.includes("--ceremony"); // play the firmament touch in the last 10 s (the tower is shown at the firmament)
 const EXEC = process.env.CHROMIUM_PATH; // e.g. /opt/pw-browsers/chromium when the project pins its own Playwright
 
 mkdirSync(path.dirname(OUT), { recursive: true });
@@ -36,6 +38,7 @@ const t0 = Date.now();
 for (let f = 0; f < frames; f++) {
   const t = f * dt;
   while (drops.length && drops[0].at <= t) await page.evaluate((n) => window.__video.drop(n), drops.shift().name);
+  if (CEREMONY && Math.abs(t - Math.max(0, SECONDS - 10)) < dt / 2) await page.evaluate(() => window.__video.ceremony(1234));
   if (CAPTION && Math.abs(t - (SECONDS - 3)) < dt / 2) await page.evaluate(([c, s]) => window.__video.caption(c, s), [CAPTION, SUB]);
   await page.evaluate((d) => window.__video.step(d), dt);
   const jpg = await page.screenshot({ type: "jpeg", quality: 92 });
