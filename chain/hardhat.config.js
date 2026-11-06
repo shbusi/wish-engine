@@ -25,5 +25,12 @@ module.exports = {
       accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
     },
   },
-  etherscan: { apiKey: { base: process.env.BASESCAN_KEY ?? "", baseSepolia: process.env.BASESCAN_KEY ?? "" } },
+  etherscan: {
+    apiKey: { base: process.env.BASESCAN_KEY ?? "", baseSepolia: process.env.BASESCAN_KEY ?? "" },
+    customChains: [
+      { network: "baseSepolia", chainId: 84532, urls: { apiURL: "https://api-sepolia.basescan.org/api", browserURL: "https://sepolia.basescan.org" } },
+      { network: "base", chainId: 8453, urls: { apiURL: "https://api.basescan.org/api", browserURL: "https://basescan.org" } },
+    ],
+  },
+  sourcify: { enabled: false },
 };
