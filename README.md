@@ -278,9 +278,14 @@ clip takes 4–5 minutes; `--lang ko` for Korean HUD text.
 ## Camera views
 
 Wheel or pinch zoom is kept as a multiplier on the automatic camera distance, so it survives the tower growing and new
-stones landing; drag orbits; double-click on the sky resets. The 📷 button (or the V key) cycles presets: auto,
-close, wide, from below, sky. `?view=<name>` opens in one of them, which is how a stream background picks its angle
-(`?ambient=1&view=low`).
+stones landing; drag orbits from nearly straight above the tower down to just over the ground, and pulls back far
+enough to see the whole tower from the sky; double-click on the sky resets. The 📷 button (or the V key) cycles
+presets: auto, close, wide, from below, sky, from above. `?view=<name>` opens in one of them, which is how a stream
+background picks its angle (`?ambient=1&view=low`).
+
+**Blessing marks and the day's top wishes.** A stone with `BLESS_MARK` (5) or more blessings carries a small "✦ N"
+light on the tower, always visible, so the most blessed wishes can be found without tapping. The Recent wishes panel
+pins the three most blessed wishes of the day (of the week while the day has none), updated live on every blessing.
 
 ## Invitations
 

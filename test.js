@@ -159,6 +159,17 @@ test("invitations: a friend's first stone rewards both sides once, never yoursel
   const a = S.analytics(30, false, Date.now()); assert.ok(a.invites.invited >= 1 && a.invites.rewarded >= 1);
 });
 
+test("top blessed: three most blessed stones of the day, week as fallback, hidden text stays hidden", async () => {
+  const t0 = Date.now(), author = createWallet();
+  const a = addStone(author, { wish: "top one", private: true }, t0).stone, b = addStone(createWallet(), { wish: "top two" }, t0 + 1).stone;
+  for (let i = 0; i < 3; i++) bless(createWallet(), a.id, t0 + i); bless(createWallet(), b.id, t0 + 5);
+  const top = S.topBlessed(null, t0 + 10);
+  assert.equal(top.range, "day"); assert.equal(top.stones[0].id, a.id); assert.equal(top.stones[0].blessings, 3); assert.equal(top.stones[0].wish, null, "private stays private in the top list");
+  assert.ok(top.stones.length <= 3 && top.stones.every((s, i, arr) => !i || arr[i - 1].blessings >= s.blessings), "sorted");
+  assert.equal(S.topBlessed(author.id, t0 + 10).stones[0].wish, "top one", "owner sees their text");
+  const later = S.topBlessed(null, t0 + 3 * 86_400_000); assert.equal(later.range, "week"); assert.equal(later.stones[0].id, a.id);
+});
+
 test("analytics: unit economics per wisher and per buyer", async () => {
   const w = createWallet(); const t0 = Date.now();
   addStone(w, { wish: "unit economics wish" }, t0);

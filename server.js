@@ -114,6 +114,7 @@ const q = {
   setPrivate: db.prepare("UPDATE stones SET private = ? WHERE id = ? AND wallet_id = ?"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
   stoneFull: db.prepare("SELECT * FROM stones WHERE id = ?"),
+  topBlessed: db.prepare("SELECT id, name, wish, sealed, private, blessings, keystone, wallet_id, created_at FROM stones WHERE bot = 0 AND blessings > 0 AND created_at >= ? ORDER BY blessings DESC, id DESC LIMIT 3"),
   bless: db.prepare("INSERT OR IGNORE INTO blessings (stone_id, wallet_id, created_at) VALUES (?, ?, ?)"),
   unbless: db.prepare("DELETE FROM blessings WHERE stone_id = ? AND wallet_id = ?"),
   countBless: db.prepare("UPDATE stones SET blessings = blessings + 1 WHERE id = ?"),
@@ -271,6 +272,13 @@ export function walletState(w, now = Date.now()) {
     karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0, seed: seedState(w, now), seedSlot: w.id, seedsUnlocked: unlockedSeeds(karma),
     invite: inviteCode(w), invites: w.invites_n ?? 0, invited: !!w.invited_by && !w.invite_paid_at, inviteReward: INVITE_REWARD };
 }
+export const BLESS_MARK = Number(process.env.BLESS_MARK ?? 5); // from this many blessings a stone carries a visible light on the tower
+/** The three most blessed stones of the day (or of the week when the day has none yet): the feed pins them. */
+export function topBlessed(viewerId = null, now = Date.now()) {
+  let range = "day", rows = q.topBlessed.all(now - 86_400_000);
+  if (!rows.length) { range = "week"; rows = q.topBlessed.all(now - 7 * 86_400_000); }
+  return { range, stones: rows.map((r) => pub(r, viewerId)) };
+}
 /** Blessings on this wallet's stones since it last asked, then mark them seen. */
 export function newBlessings(w, now = Date.now()) {
   const fresh = q.walletById.get(w.id);
@@ -407,7 +415,7 @@ export function bless(wallet, stoneId, now = Date.now()) {
   else { q.unbless.run(st.id, wallet.id); throw Object.assign(new Error("need_credits"), { status: 402 }); }
   q.countBless.run(st.id); q.addKarma.run(1, wallet.id);
   const stone = pub(q.one.get(st.id));
-  broadcast({ type: "bless", id: stone.id, blessings: stone.blessings });
+  broadcast({ type: "bless", id: stone.id, blessings: stone.blessings, top: topBlessed() });
   return { stone, free, wallet: walletState(q.walletById.get(wallet.id), now) };
 }
 
@@ -588,7 +596,7 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   return v;
 }
 const givingUsd = () => { const b = q.mBuyers.get(); return Math.round(b.usd * DONATION.bps) / 10000; }; // web packs only; on-chain giving is read from the chain by the pages
-const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, giving: { usd: givingUsd(), bps: DONATION.bps, name: DONATION.name, url: DONATION.url }, karmaTotal: q.karmaTotal.get().n, karmaTiers: KARMA_TIERS, weather: weatherNow(), firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
+const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, blessMark: BLESS_MARK, firmamentM: FIRMAMENT_M, giving: { usd: givingUsd(), bps: DONATION.bps, name: DONATION.name, url: DONATION.url }, karmaTotal: q.karmaTotal.get().n, karmaTiers: KARMA_TIERS, weather: weatherNow(), firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
 
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -682,7 +690,7 @@ export const server = http.createServer(async (req, res) => {
       const a = url.searchParams.get("after"), id = url.searchParams.get("id");
       const viewer = walletByToken(cookieOf(req, WALLET_COOKIE))?.id ?? null; // owners see their own sealed wishes
       if (id) { const s = stoneById(id, viewer); return s ? json(res, 200, { stone: s }) : json(res, 404, { error: "not_found" }); }
-      return json(res, 200, { ...stats(), stones: a ? after(a, 100, viewer) : recent(Number(url.searchParams.get("n") ?? 40), viewer) });
+      return json(res, 200, { ...stats(), stones: a ? after(a, 100, viewer) : recent(Number(url.searchParams.get("n") ?? 40), viewer), top: a ? undefined : topBlessed(viewer) });
     }
 
     if (req.method === "POST" && url.pathname === "/api/stones") {
