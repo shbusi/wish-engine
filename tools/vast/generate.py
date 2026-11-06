@@ -56,8 +56,21 @@ def sky_seam(img, feather=0.08):
     return Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8))
 
 # ---------- model ----------
+def _heartbeat():
+    """Every minute while the model downloads: how many GB are in the HF cache, so a stall is visible from outside."""
+    import threading, subprocess
+    def loop():
+        while not HB_STOP.is_set():
+            try:
+                out = subprocess.run(["du", "-sb", os.path.expanduser("~/.cache/huggingface")], capture_output=True, text=True).stdout
+                gb = int(out.split()[0]) / 2**30 if out else 0
+                status("setup", 5, f"downloading · {gb:.1f} GB in cache")
+            except Exception: pass
+            HB_STOP.wait(60)
+    threading.Thread(target=loop, daemon=True).start()
+import threading; HB_STOP = threading.Event()
 try:
-    status("setup", 2, "loading model")
+    status("setup", 2, "loading model"); _heartbeat()
     from huggingface_hub import login
     if os.environ.get("HF_TOKEN"): login(token=os.environ["HF_TOKEN"], add_to_git_credential=False)
     from diffusers import FluxPipeline, StableDiffusionXLPipeline
@@ -80,7 +93,7 @@ try:
     is_flux = isinstance(pipe, FluxPipeline)
     if vram < 40 and is_flux: pipe.enable_model_cpu_offload()
     else: pipe.to("cuda")
-    status("setup", 15, f"{model} on {vram:.0f}GB")
+    HB_STOP.set(); status("setup", 15, f"{model} on {vram:.0f}GB")
     gen = lambda seed: torch.Generator("cuda").manual_seed(seed)
     NEG_HINT = " No text, no watermark, no people, no logos."
     NEG = "text, watermark, logo, people, person, hands, blurry, low quality, frame, border, vignette"

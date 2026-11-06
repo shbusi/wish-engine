@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs on the vast.ai instance at boot. Generates assets, uploads them to the S3 relay, then destroys the instance.
 cd /root
-export DEBIAN_FRONTEND=noninteractive HF_HUB_ENABLE_HF_TRANSFER=1 PYTHONUNBUFFERED=1
+export DEBIAN_FRONTEND=noninteractive HF_HUB_ENABLE_HF_TRANSFER=0 HF_HUB_DOWNLOAD_TIMEOUT=60 PYTHONUNBUFFERED=1  # hf_transfer stalled a 33 GB download once; plain downloads with a timeout retry instead
 INSTANCE_ID="${VAST_CONTAINERLABEL#C.}"
 {
   echo "== $(date -u) start on $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
