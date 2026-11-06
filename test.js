@@ -143,6 +143,17 @@ test("sealed wish: costs one extra stone, text hidden from everyone but the owne
   assert.equal(r2.wallet.credits, PACK.stones - 3);
 });
 
+test("analytics: unit economics per wisher and per buyer", async () => {
+  const w = createWallet(); const t0 = Date.now();
+  addStone(w, { wish: "unit economics wish" }, t0);
+  const o = await createOrder(w, "mock"); settleOrder(o.id, true);
+  const u = S.analytics(30, true, t0 + 1000).unit;
+  assert.ok(u.wishers >= 1 && u.buyers >= 1, "a wisher and a buyer in the window");
+  assert.ok(u.revenue > 0 && u.arpu > 0 && u.arppu > 0, "revenue is attributed per wisher and per buyer");
+  assert.equal(u.split.stakersBps, 5000); assert.ok(u.lifetime.arpu > 0);
+  assert.equal(S.analytics(30, false, t0 + 1000).unit, undefined, "operator-only");
+});
+
 test("private wish: free, text hidden from others, owner toggles it, can be blessed; sealed stones are closed", async () => {
   const w = createWallet(), other = createWallet();
   const t0 = 6_000_000;

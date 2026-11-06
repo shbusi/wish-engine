@@ -130,6 +130,7 @@ const q = {
   mDays: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n, COUNT(DISTINCT wallet_id) AS w, SUM(paid) AS p FROM stones WHERE bot = 0 AND created_at > ? GROUP BY d ORDER BY d"),
   mTotals: db.prepare("SELECT COUNT(*) AS stones, COUNT(DISTINCT wallet_id) AS wallets, SUM(paid) AS paid, SUM(sealed) AS sealed, SUM(CASE WHEN chain_id IS NOT NULL THEN 1 ELSE 0 END) AS onchain, SUM(blessings) AS blessings FROM stones WHERE bot = 0"),
   mReturning: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE placed >= 2"),
+  aWishers: db.prepare("SELECT COUNT(DISTINCT wallet_id) AS n FROM stones WHERE bot = 0 AND wallet_id IS NOT NULL AND created_at >= ?"),
   seedPlant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_name = ?, seed_x = ?, seed_z = ?, seed_kind = ?, seed_log = ? WHERE id = ? AND seed_day IS NULL"),
   seedReplant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_x = ?, seed_z = ?, seed_kind = ?, seed_log = ? WHERE id = ?"),
   seedLog: db.prepare("UPDATE wallets SET seed_log = ? WHERE id = ?"),
@@ -529,8 +530,15 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   const all = q.aCohort.all(fromMs, now + 1);
   const funnel = { wallets: all.length, activated: all.filter((r) => r.activated).length, paid: all.filter((r) => r.paid).length };
   const totalSecs = series.reduce((a, r) => a + r.secs * r.visits, 0), totalVisits = sum("visits", series);
+  // unit economics: what a wisher, a buyer and a stone are worth (web pack revenue only; on-chain revenue is read from the chain by the pages)
+  const tot = metrics(now).totals, revenue = sum("revenue", series), wishers = q.aWishers.get(fromMs).n, ordersPaid = sum("ordersPaid", series), paidStones = sum("paidStones", series);
+  const per = (a, b, d = 4) => b ? Math.round(a / b * 10 ** d) / 10 ** d : null;
+  const unit = { revenue: Math.round(revenue * 100) / 100, wallets: all.length, wishers, buyers: funnel.paid, stones: sum("stones", series), paidStones, ordersPaid,
+    arpu: per(revenue, wishers), arppu: per(revenue, funnel.paid, 2), aov: per(revenue, ordersPaid, 2), revPerStone: per(revenue, sum("stones", series)), stonesPerWisher: per(sum("stones", series), wishers, 2), paidStonesPerBuyer: per(paidStones, funnel.paid, 1),
+    lifetime: { wishers: tot.wallets, buyers: tot.buyers, revenue: tot.revenueUsd, arpu: per(tot.revenueUsd, tot.wallets), arppu: per(tot.revenueUsd, tot.buyers, 2) },
+    split: { stakersBps: 5000, charityBps: DONATION.bps, supply: 1e9 } };
   const ab = KARMA_AB ? Object.fromEntries(q.abGroups.all(fromMs).map((r) => [r.grp === 0 ? "karmaOn" : "karmaOff", { wallets: r.wallets, activated: r.activated, stones: r.stones ?? 0, paid: r.paid }])) : null;
-  const v = { days, series, growth, retention, funnel, ab, karmaTotal: q.karmaTotal.get().n, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
+  const v = { days, series, growth, retention, funnel, unit: admin ? unit : undefined, ab, karmaTotal: q.karmaTotal.get().n, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
   analyticsCache.set(key, { at: now, v });
   return v;
 }

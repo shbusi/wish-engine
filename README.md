@@ -218,7 +218,12 @@ deep links and desktops a link to install one. No wallet SDK, no project id, no 
 - **Growth**: every KPI tile shows the last 7 days against the 7 before, with the % change.
 
 Operator view: open `/analytics?token=<ADMIN_TOKEN>` once (stored in sessionStorage) or use the "enter token"
-link; it adds the sources table and `GET /api/analytics.csv` (daily rows, 90 days). Seeded stones are excluded
+link; it adds the sources table and `GET /api/analytics.csv` (daily rows, 90 days). The operator view also has a
+**unit economics** card (revenue per wisher, per buyer, per stone, average order, all-time ARPU/ARPPU; web pack
+revenue only) and a what-if calculator seeded with those numbers: new wishers per day, monthly growth, ARPU, months
+of repeat payment, token price and staked share → 12-month revenue, the stakers' half, the giving share and the
+stakers' yield (pool ÷ staked tokens × price), so "what does a user earn us, and what does that pay an investor"
+is answered on the page rather than in a spreadsheet. Seeded stones are excluded
 from every visitor metric and never labelled. The chart palette was validated for colour-vision deficiency on the
 dark surface.
 
