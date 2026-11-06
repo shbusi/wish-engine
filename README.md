@@ -28,6 +28,22 @@ npm test
 - **Older stones** (beyond the newest 20) become an instanced mound that grows up to meet the tower, so the tower never sinks as the window moves.
 - **Post**: ACES tone mapping, bloom, vignette. Mobile gets fewer particles, smaller shadow maps, lighter bloom.
 
+## The climb: the world changes with height
+
+Height is the tower's cumulative height (stones × 9 cm), so the scene can rise even though only the newest
+stones are drawn. Five bands blend into each other as the number grows, and the HUD always names the next one:
+
+| from | band | what changes |
+|---|---|---|
+| 0 m | Meadow | moonlit grass, lantern, fireflies, fog |
+| 8 m | Above the trees | fog thins, fireflies gone, a cloud layer appears below |
+| 25 m | Above the clouds | a sea of clouds under the tower, bigger moon, more stars |
+| 80 m | Edge of the sky | the dome turns glassy teal, aurora curtains, the lights in it sharpen |
+| 250 m | The Firmament | the waters above: a ceiling of water with caustic light, drops falling past the stones |
+
+The worldview is the old one: the sky is a dome holding back the waters above, and the tower climbs toward it.
+Preview any height with `/?alt=120`.
+
 ## Height, and why you keep stacking
 
 - The HUD leads with the **tower height** (one stone = `STONE_CM`, default 9 cm), a progress bar to the next
