@@ -4,12 +4,12 @@
 // 24h; after that a stone costs one credit. Credits come in packs bought via
 // PayPal (or the dev-only mock provider).
 import http from "node:http";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { SOILS, SEEDS, STAGES as SEED_STAGE_TABLE, soilAt, inGarden, growthOf, keptWaterings, stageOf, unlockedSeeds, MIN_GAP, RADIUS_MIN, RADIUS_MAX } from "./soil.js";
+import { SOILS, SEEDS, STAGES as SEED_STAGE_TABLE, soilAt, inGarden, simulate, weatherOn, unlockedSeeds, MIN_GAP, RADIUS_MIN, RADIUS_MAX, MULCH_DAYS } from "./soil.js";
 import { chain, chainPublic, signVoucher, preparePending, startIndexer } from "./chain-link.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -36,6 +36,7 @@ const PROVIDERS = (process.env.PAYMENT_PROVIDERS ?? (process.env.PAYPAL_CLIENT_I
 const MOCK_OK = process.env.NODE_ENV !== "production" || process.env.ALLOW_MOCK_PAYMENTS === "1";
 
 // ---------- storage ----------
+try { if (DB_PATH !== ":memory:") mkdirSync(path.dirname(path.resolve(DB_PATH)), { recursive: true }); } catch {} // e.g. DB_PATH=/data/cairn.db before the volume is attached: start anyway
 const db = new DatabaseSync(DB_PATH);
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -96,6 +97,7 @@ try { db.exec("ALTER TABLE wallets ADD COLUMN seed_name TEXT"); } catch {}      
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_x REAL NOT NULL DEFAULT 0"); } catch {}           // where it is planted (world units around the base)
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_z REAL NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_kind TEXT NOT NULL DEFAULT 'wildflower'"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_log TEXT NOT NULL DEFAULT '{}'"); } catch {}          // {"w":[day…],"m":[day…]} waterings and mulches, real day indexes
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
@@ -125,12 +127,13 @@ const q = {
   mDays: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n, COUNT(DISTINCT wallet_id) AS w, SUM(paid) AS p FROM stones WHERE bot = 0 AND created_at > ? GROUP BY d ORDER BY d"),
   mTotals: db.prepare("SELECT COUNT(*) AS stones, COUNT(DISTINCT wallet_id) AS wallets, SUM(paid) AS paid, SUM(sealed) AS sealed, SUM(CASE WHEN chain_id IS NOT NULL THEN 1 ELSE 0 END) AS onchain, SUM(blessings) AS blessings FROM stones WHERE bot = 0"),
   mReturning: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE placed >= 2"),
-  seedPlant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_name = ?, seed_x = ?, seed_z = ?, seed_kind = ? WHERE id = ? AND seed_day IS NULL"),
-  seedReplant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_x = ?, seed_z = ?, seed_kind = ? WHERE id = ?"),
+  seedPlant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_name = ?, seed_x = ?, seed_z = ?, seed_kind = ?, seed_log = ? WHERE id = ? AND seed_day IS NULL"),
+  seedReplant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_x = ?, seed_z = ?, seed_kind = ?, seed_log = ? WHERE id = ?"),
+  seedLog: db.prepare("UPDATE wallets SET seed_log = ? WHERE id = ?"),
   seedSpots: db.prepare("SELECT seed_x AS x, seed_z AS z FROM wallets WHERE seed_day IS NOT NULL AND id != ?"),
   seedWater: db.prepare("UPDATE wallets SET seed_water = ?, seed_last = ? WHERE id = ? AND seed_day IS NOT NULL AND seed_last < ?"),
   seedName: db.prepare("UPDATE wallets SET seed_name = ? WHERE id = ?"),
-  seeds: db.prepare("SELECT id, seed_day, seed_water, seed_last, seed_name, seed_x, seed_z, seed_kind FROM wallets WHERE seed_day IS NOT NULL ORDER BY seed_last DESC LIMIT ?"),
+  seeds: db.prepare("SELECT id, seed_day, seed_water, seed_last, seed_name, seed_x, seed_z, seed_kind, seed_log FROM wallets WHERE seed_day IS NOT NULL ORDER BY seed_last DESC LIMIT ?"),
   mBuyers: db.prepare("SELECT COUNT(DISTINCT wallet_id) AS n, COALESCE(SUM(CAST(usd AS REAL)), 0) AS usd FROM orders WHERE status = 'PAID'"),
   // analytics
   visitPut: db.prepare("INSERT OR IGNORE INTO visits (id, wallet_id, day, source, path, lang, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
@@ -249,26 +252,26 @@ export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
   return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
 }
 
-// ---------- seeds ----------
+// ---------- seeds: a real-data simulation (soil profile × species traits × daily weather), see soil.js ----------
 export const SEED_STAGES = SEED_STAGE_TABLE;
-const seedRow = (w) => ({ waterings: w.seed_water, lastDay: w.seed_last, soil: soilAt(w.seed_x, w.seed_z) });
+const seedLog = (w) => { try { const j = JSON.parse(w.seed_log || "{}"); return { w: j.w ?? [], m: j.m ?? [] }; } catch { return { w: [], m: [] }; } };
+const plantOf = (w) => { const log = seedLog(w); return { plantedDay: w.seed_day, kind: w.seed_kind, soil: soilAt(w.seed_x, w.seed_z), waters: log.w, mulches: log.m }; };
 export function seedState(w, now = Date.now()) {
   if (w.seed_day == null) return null;
-  const today = dayOf(now), soil = soilAt(w.seed_x, w.seed_z), growth = growthOf(seedRow(w), today), stage = stageOf(growth, w.seed_kind, soil);
-  const next = SEED_STAGES[stage + 1] ? Math.max(1, Math.ceil((SEED_STAGES[stage + 1] - growth) / SOILS[soil].speed)) : null;
-  return { stage, growth: Math.round(growth * 10) / 10, waterings: w.seed_water, plantedDay: w.seed_day, days: today - w.seed_day, canWater: w.seed_last < today, thirstyDays: Math.max(0, today - w.seed_last - 1),
-    name: w.seed_name, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil, blooms: SEEDS[w.seed_kind]?.bloomsOn.includes(soil) ?? true, next };
+  const today = dayOf(now), plant = plantOf(w), sim = simulate(plant, today);
+  return { ...sim, waterings: plant.waters.length, plantedDay: w.seed_day, days: today - w.seed_day, canWater: !plant.waters.includes(today), canMulch: !sim.mulched,
+    thirstyDays: Math.max(0, today - (plant.waters.at(-1) ?? w.seed_day) - 1), name: w.seed_name, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil: plant.soil };
 }
-/** A free spot for an automatic planting (first stone): a golden-angle spiral, skipping taken spots. */
+export const weatherNow = (now = Date.now()) => { const d = dayOf(now); return { today: weatherOn(d), tomorrow: weatherOn(d + 1) }; };
 function autoSpot(walletId) {
   const taken = q.seedSpots.all(walletId);
   for (let i = 0; i < 400; i++) { const k = walletId + i * 37, a = k * 2.39996, r = RADIUS_MIN + 1 + ((k * 0.618) % 1) * (RADIUS_MAX - RADIUS_MIN - 2); const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (!taken.some((t) => Math.hypot(t.x - x, t.z - z) < MIN_GAP)) return { x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 }; }
   return { x: 0, z: RADIUS_MIN + 1 };
 }
-/** Plant the seed with the first stone (idempotent): a wildflower at a free spot. The wisher can move it later. */
-export function plantSeed(walletId, name, now = Date.now()) { const w = q.walletById.get(walletId); if (!w || w.seed_day != null) return; const sp = autoSpot(walletId); q.seedPlant.run(dayOf(now), dayOf(now), name || null, sp.x, sp.z, "wildflower", walletId); }
-/** Choose where and what: replants (growth starts over at the first watering). Throws 400 on a bad spot or a locked seed. */
+/** Plant with the first stone (idempotent): a wildflower at a free spot, watered in. */
+export function plantSeed(walletId, name, now = Date.now()) { const w = q.walletById.get(walletId); if (!w || w.seed_day != null) return; const sp = autoSpot(walletId), d = dayOf(now); q.seedPlant.run(d, d, name || null, sp.x, sp.z, "wildflower", JSON.stringify({ w: [d], m: [] }), walletId); }
+/** Choose where and what (also how you start over after a plant dies). */
 export function replantSeed(wallet, { x, z, kind }, now = Date.now()) {
   const w = q.walletById.get(wallet.id); x = Number(x); z = Number(z); kind = String(kind ?? "wildflower");
   if (!Number.isFinite(x) || !Number.isFinite(z) || !inGarden(x, z)) throw Object.assign(new Error("bad_spot"), { status: 400 });
@@ -276,22 +279,33 @@ export function replantSeed(wallet, { x, z, kind }, now = Date.now()) {
   if (!unlockedSeeds(w.karma ?? 0).includes(kind)) throw Object.assign(new Error("seed_locked"), { status: 403 });
   if (q.seedSpots.all(w.id).some((t) => Math.hypot(t.x - x, t.z - z) < MIN_GAP)) throw Object.assign(new Error("spot_taken"), { status: 409 });
   if (w.seed_day == null && w.placed < 1) throw Object.assign(new Error("no_stone"), { status: 402 });
-  q.seedReplant.run(dayOf(now), dayOf(now), Math.round(x * 100) / 100, Math.round(z * 100) / 100, kind, w.id);
+  const d = dayOf(now);
+  q.seedReplant.run(d, d, Math.round(x * 100) / 100, Math.round(z * 100) / 100, kind, JSON.stringify({ w: [d], m: [] }), w.id);
   const fresh = q.walletById.get(w.id); return { seed: seedState(fresh, now), wallet: walletState(fresh, now) };
 }
-/** Water once a day: +1 watering, +1 karma. Throws 409 if already watered today, 404 without a seed. */
+/** Water once a day: fills the soil, +1 karma. Throws 409 if already watered today, 404 without a seed, 410 if it is dead. */
 export function waterSeed(wallet, now = Date.now()) {
   const w = q.walletById.get(wallet.id); if (w.seed_day == null) throw Object.assign(new Error("no_seed"), { status: 404 });
-  const today = dayOf(now);
-  // wilting is folded back into the stored waterings so a recovered plant resumes from where it wilted to
-  const kept = keptWaterings(seedRow(w), today);
-  if (q.seedWater.run(kept + 1, today, w.id, today).changes === 0) throw Object.assign(new Error("watered_today"), { status: 409 });
+  const today = dayOf(now), log = seedLog(w);
+  if (!simulate(plantOf(w), today).alive) throw Object.assign(new Error("dead"), { status: 410 });
+  if (log.w.includes(today)) throw Object.assign(new Error("watered_today"), { status: 409 });
+  log.w.push(today); q.seedLog.run(JSON.stringify(log), w.id); db.prepare("UPDATE wallets SET seed_water = seed_water + 1, seed_last = ? WHERE id = ?").run(today, w.id);
   q.addKarma.run(1, w.id);
   const fresh = q.walletById.get(w.id);
   return { seed: seedState(fresh, now), wallet: walletState(fresh, now) };
 }
-/** The garden: everyone's plants, newest-watered first, public shape (slot = a stable number, never the wallet token). */
-export const seeds = (n = 60, now = Date.now()) => q.seeds.all(Math.min(300, Math.max(1, n))).map((w) => { const st = seedState(w, now); return { slot: w.id, stage: st.stage, days: st.days, name: w.seed_name, thirsty: st.thirstyDays >= 1, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil: st.soil }; });
+/** Mulch: shields a young plant from frost and halves evaporation for MULCH_DAYS. Free, once per cover. */
+export function mulchSeed(wallet, now = Date.now()) {
+  const w = q.walletById.get(wallet.id); if (w.seed_day == null) throw Object.assign(new Error("no_seed"), { status: 404 });
+  const today = dayOf(now), log = seedLog(w);
+  if (!simulate(plantOf(w), today).alive) throw Object.assign(new Error("dead"), { status: 410 });
+  if (log.m.some((m) => today >= m && today < m + MULCH_DAYS)) throw Object.assign(new Error("mulched"), { status: 409 });
+  log.m.push(today); q.seedLog.run(JSON.stringify(log), w.id);
+  const fresh = q.walletById.get(w.id);
+  return { seed: seedState(fresh, now), wallet: walletState(fresh, now) };
+}
+/** The garden: everyone's plants, public shape. */
+export const seeds = (n = 60, now = Date.now()) => q.seeds.all(Math.min(300, Math.max(1, n))).map((w) => { const st = seedState(w, now); return { slot: w.id, stage: st.stage, days: st.days, name: w.seed_name, thirsty: st.alive && st.warnings.includes("thirsty"), alive: st.alive, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil: st.soil }; });
 
 /** The moment the tower reaches the firmament: once, ever. Rewards everyone who has stacked, marks the keystone. */
 export const firmamentStones = () => Math.ceil(FIRMAMENT_M * 100 / STONE_CM);
@@ -503,7 +517,7 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   return v;
 }
 const givingUsd = () => { const b = q.mBuyers.get(); return Math.round(b.usd * DONATION.bps) / 10000; }; // web packs only; on-chain giving is read from the chain by the pages
-const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, giving: { usd: givingUsd(), bps: DONATION.bps, name: DONATION.name, url: DONATION.url }, karmaTotal: q.karmaTotal.get().n, karmaTiers: KARMA_TIERS, firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
+const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, giving: { usd: givingUsd(), bps: DONATION.bps, name: DONATION.name, url: DONATION.url }, karmaTotal: q.karmaTotal.get().n, karmaTiers: KARMA_TIERS, weather: weatherNow(), firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
 
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -527,7 +541,14 @@ export const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(page("analytics.html"));
     }
-    if (req.method === "GET" && url.pathname === "/api/seeds") return json(res, 200, { seeds: seeds(Number(url.searchParams.get("n") ?? 60)), stages: SEED_STAGES });
+    if (req.method === "GET" && url.pathname === "/api/seeds") return json(res, 200, { seeds: seeds(Number(url.searchParams.get("n") ?? 60)), stages: SEED_STAGES, weather: weatherNow() });
+    if (req.method === "GET" && url.pathname === "/api/weather") return json(res, 200, weatherNow());
+    if (req.method === "POST" && url.pathname === "/api/seed/mulch") {
+      if (limited(ip, "mulch", 10)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      try { return json(res, 200, mulchSeed(w), setCookie ? { "Set-Cookie": setCookie } : {}); }
+      catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w) }, setCookie ? { "Set-Cookie": setCookie } : {}); }
+    }
     if (req.method === "POST" && url.pathname === "/api/seed/plant") {
       if (limited(ip, "plant", 10)) return json(res, 429, { error: "rate_limited" });
       const [w, setCookie] = wallet(req);
@@ -557,7 +578,7 @@ export const server = http.createServer(async (req, res) => {
       return res.end([cols.join(","), ...a.series.map((r) => cols.map((c) => r[c]).join(","))].join("\n"));
     }
     if (req.method === "GET" && url.pathname === "/api/metrics") return json(res, 200, { ...metrics(), chain: chainPublic() }, { "Cache-Control": "public, max-age=60" });
-    if (url.pathname === "/wallet.js" || url.pathname === "/i18n.js" || url.pathname === "/soil.js") {
+    if (url.pathname === "/wallet.js" || url.pathname === "/i18n.js" || url.pathname === "/soil.js" || url.pathname === "/agri.js") {
       res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-cache" });
       return res.end(page(url.pathname.slice(1)));
     }

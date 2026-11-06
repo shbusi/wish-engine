@@ -181,33 +181,44 @@ test("karma: one per stone placed and per blessing given; tiers from the thresho
   assert.equal(walletState(S.walletByToken(a.token)).karmaUi, true, "everyone sees it unless KARMA_AB=1");
 });
 
-test("seed: planted with the first stone at a free spot, grows by soil speed, wilts by soil, waters once a day", () => {
-  const { waterSeed, SEED_STAGES, replantSeed } = S; const { soilAt } = Soil;
-  const w = createWallet(); const DAY = 86_400_000; const t0 = Date.now();
-  assert.equal(walletState(w).seed, null);
-  assert.throws(() => waterSeed(w, t0), /no_seed/);
+test("seed: planted with the first stone; grows with daily water and weather; dies when neglected in a dry spell; mulch stops frost; data-driven fits", () => {
+  const { waterSeed, mulchSeed, replantSeed } = S; const { simulate, soilAt, SPECIES } = Soil;
+  const DAY = 86_400_000, t0 = Date.now(), today = Math.floor(t0 / DAY);
+  const w = createWallet(); assert.equal(walletState(w).seed, null);
   addStone(w, { name: "Mira", wish: "grow" }, t0);
   let sd = walletState(S.walletByToken(w.token), t0).seed;
-  assert.equal(sd.stage, 1, "sprout on planting day"); assert.equal(sd.canWater, false); assert.equal(sd.name, "Mira"); assert.equal(sd.kind, "wildflower"); assert.ok(Soil.inGarden(sd.x, sd.z));
+  assert.equal(sd.kind, "wildflower"); assert.equal(sd.waterings, 1); assert.equal(sd.canWater, false); assert.ok(Soil.inGarden(sd.x, sd.z)); assert.ok(sd.weather && sd.tomorrow, "weather comes with the state");
   assert.throws(() => waterSeed(w, t0 + 1000), /watered_today/);
-  // move it onto rocky ground (slow, never wilts) and onto river ground (fast, wilts after 2 days) to compare
+  const r1 = waterSeed(w, t0 + DAY); assert.equal(r1.seed.waterings, 2); assert.equal(r1.wallet.karma, 2, "watering is a deed");
+  // the simulation with a controlled climate: warm, dry, no rain → an unwatered black-eyed Susan dies of drought
+  const warmDry = (d) => ({ day: d, doy: 180, month: 6, tmean: 26, tmin: 19, tmax: 32, rain: 0, cond: "dry", dryStreak: 9 });
+  const dead = simulate({ plantedDay: 0, kind: "wildflower", soil: "meadow", waters: [0], mulches: [] }, 30, warmDry);
+  assert.equal(dead.alive, false); assert.equal(dead.cause, "drought"); assert.ok(dead.diedOn > 0 && dead.diedOn < 30);
+  const cared = simulate({ plantedDay: 0, kind: "wildflower", soil: "meadow", waters: Array.from({ length: 31 }, (_, i) => i), mulches: [] }, 30, warmDry);
+  assert.equal(cared.alive, true); assert.equal(cared.stage, 5, "daily water in summer → in bloom");
+  // frost on a seedling: mulch is the difference
+  const frosty = (d) => ({ day: d, doy: 60, month: 2, tmean: 4, tmin: -6, tmax: 11, rain: 0, cond: "frost", dryStreak: 0 });
+  const mild = (d) => ({ day: d, doy: 100, month: 3, tmean: 14, tmin: 7, tmax: 21, rain: 0, cond: "clear", dryStreak: 0 });
+  const wx = (d) => (d < 2 ? mild(d) : frosty(d)); // two mild days: a seedling, then a cold snap
+  const unprotected = simulate({ plantedDay: 0, kind: "wildflower", soil: "meadow", waters: Array.from({ length: 12 }, (_, i) => i), mulches: [] }, 6, wx);
+  const protectedP = simulate({ plantedDay: 0, kind: "wildflower", soil: "meadow", waters: Array.from({ length: 12 }, (_, i) => i), mulches: [2] }, 6, wx); // mulched the day the cold snap starts
+  assert.ok(unprotected.health < protectedP.health, "mulch shields the seedling"); assert.equal(unprotected.alive, false, "five frost nights kill an unmulched seedling");
+  assert.equal(protectedP.alive, true); assert.ok(protectedP.stress.includes("frostMulched"));
+  assert.equal(simulate({ plantedDay: 0, kind: "wildflower", soil: "meadow", waters: Array.from({ length: 12 }, (_, i) => i), mulches: [2] }, 11, wx).alive, false, "a mulch lasts five days; the cold goes on");
+  // USDA traits decide fits: white pine needs cold stratification; the lotus never blooms off wet ground; witch-hazel blooms in fall only
+  assert.deepEqual(simulate({ plantedDay: 0, kind: "pine", soil: "rocky", waters: [0], mulches: [] }, 3, warmDry).stress, ["strat"]);
+  const lot = simulate({ plantedDay: 0, kind: "lotus", soil: "meadow", waters: Array.from({ length: 60 }, (_, i) => i), mulches: [] }, 59, warmDry); assert.equal(lot.stage, 4); assert.ok(lot.stress.includes("needsWet"));
+  const lotWet = simulate({ plantedDay: 0, kind: "lotus", soil: "river", waters: Array.from({ length: 60 }, (_, i) => i), mulches: [] }, 59, warmDry); assert.equal(lotWet.stage, 5, "lotus blooms on the riverbank in midsummer");
+  assert.equal(SPECIES.lantern.usda, "HAVI4");
+  // server endpoints: mulch once per cover, replant after death keeps the spot rules
+  const m1 = mulchSeed(w, t0 + DAY); assert.equal(m1.seed.mulched, true); assert.throws(() => mulchSeed(w, t0 + 2 * DAY), /mulched/);
   const find = (soil) => { for (let a = 0; a < 6.28; a += 0.05) for (let r = 4; r < 11.9; r += 0.5) { const x = Math.cos(a) * r, z = Math.sin(a) * r; if (soilAt(x, z) === soil) return { x, z }; } throw new Error("no " + soil); };
-  const rock = find("rocky"); const r1 = replantSeed(w, { ...rock, kind: "wildflower" }, t0); assert.equal(r1.seed.soil, "rocky"); assert.equal(r1.seed.growth, 0.7, "rock is slow: the first watering is not yet a sprout");
-  for (let d = 1; d <= 6; d++) waterSeed(w, t0 + d * DAY);                                   // 7 waterings × 0.7 = 4.9 → stage 3
-  sd = walletState(S.walletByToken(w.token), t0 + 6 * DAY).seed; assert.equal(sd.waterings, 7); assert.equal(sd.stage, 3);
-  sd = walletState(S.walletByToken(w.token), t0 + 30 * DAY).seed; assert.equal(sd.stage, 3, "rock never wilts");
-  const river = find("river"); const r2 = replantSeed(w, { ...river, kind: "wildflower" }, t0 + 30 * DAY); assert.equal(r2.seed.soil, "river");
-  for (let d = 31; d <= 34; d++) waterSeed(w, t0 + d * DAY);                                 // 5 waterings × 1.4 = 7 → in bloom
-  sd = walletState(S.walletByToken(w.token), t0 + 34 * DAY).seed; assert.equal(sd.stage, 5, "river blooms fast");
-  sd = walletState(S.walletByToken(w.token), t0 + 39 * DAY).seed; assert.ok(sd.stage < 5, "river wilts after 2 missed days"); assert.equal(sd.thirstyDays, 4);
-  assert.equal(SEED_STAGES.length, 6);
-  // seeds unlock with karma; the lotus never opens on dry ground
-  assert.throws(() => replantSeed(w, { ...rock, kind: "lantern" }, t0 + 40 * DAY), /seed_locked/);
-  const r3 = replantSeed(w, { ...rock, kind: "lotus" }, t0 + 40 * DAY); assert.equal(r3.seed.blooms, false);
+  const river = find("river"); const r2 = replantSeed(w, { ...river, kind: "wildflower" }, t0 + 2 * DAY); assert.equal(r2.seed.soil, "river"); assert.equal(r2.seed.waterings, 1);
+  assert.throws(() => replantSeed(w, { ...river, kind: "lantern" }, t0 + 2 * DAY), /seed_locked/);
   assert.throws(() => replantSeed(w, { x: 0, z: 1, kind: "wildflower" }), /bad_spot/);
-  const other = createWallet(); addStone(other, { wish: "mine too" }, t0 + 40 * DAY);
-  assert.throws(() => replantSeed(other, { ...rock, kind: "wildflower" }, t0 + 40 * DAY), /spot_taken/);
-  const g = S.seeds(10, t0 + 40 * DAY); assert.ok(g.some((p) => p.name === "Mira" && p.kind === "lotus" && p.soil === "rocky"));
+  const other = createWallet(); addStone(other, { wish: "mine too" }, t0 + 2 * DAY);
+  assert.throws(() => replantSeed(other, { ...river, kind: "wildflower" }, t0 + 2 * DAY), /spot_taken/);
+  const g = S.seeds(10, t0 + 2 * DAY); assert.ok(g.some((p) => p.name === "Mira" && p.soil === "river" && p.alive === true));
 });
 
 after(() => server.close());
