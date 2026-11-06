@@ -156,7 +156,10 @@ Neglect kills: a wildflower watered only at planting dies of drought in about a 
 (once a day, +1 karma) and mulch (five days: shields seedlings from frost, halves evaporation). The panel shows
 today's and tomorrow's weather, health and soil water, and plain-language warnings ("frost tomorrow night: mulch
 it"). Dead plants stay as a dry stalk until replanted. Endpoints: `GET /api/seeds`, `GET /api/weather`,
-`POST /api/seed/plant|water|mulch`. A live weather provider can replace the simulation when `api.open-meteo.com`
+`POST /api/seed/plant|water|mulch`. The garden is flat and wide (radius 26 around the base, two brooks); in the
+garden view you wander it with a two-finger drag / right-drag or WASD and the arrow keys, clamped to its edge. There
+is no painted soil map: the spot marker and a faint ring under each plant take the soil's colour instead (green
+meadow, blue brook, sand rocky, dark-green moss). A live weather provider can replace the simulation when `api.open-meteo.com`
 is reachable. Sources are listed in `agri.js`.
 
 **Karma**: one stone = one wish = one good deed. Every stone placed and every blessing given adds 1 karma to the
@@ -259,6 +262,14 @@ The page is opened with `?video=1`: it stops animating on its own and exposes `w
 ffmpeg. Dropped stones exist only in the capture; nothing is written to the server. Needs ffmpeg and Playwright
 (`npm i -D playwright && npx playwright install chromium`). About 0.7 s per frame on a CPU renderer, so an 18 s
 clip takes 4–5 minutes; `--lang ko` for Korean HUD text.
+
+## Stream background: `?ambient=1`
+
+For streamers and OBS: `https://<site>/?ambient=1&ref=<creator>` shows only the tower (no panels, no buttons), rotates
+slowly and prints a small `Wish Cairn · <host>` caption in the corner, so the live tower can sit behind a broadcast as
+a browser source (1920×1080, 30 fps is enough). Stones stacked by the audience land in the background in real time
+over SSE. The `ref` is recorded by the visit beacon, so `/analytics` shows how many visitors and stones each creator
+brought (the basis for a revenue share rather than a flat fee).
 
 ## Virtual early users (seeding)
 
