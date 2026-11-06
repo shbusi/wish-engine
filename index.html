@@ -559,10 +559,11 @@ function tick() {
   // altitude eases toward the real value so a new stone nudges the world rather than snapping it
   const targetAlt = altOverride ?? (total * stoneCm) / 100; altShown += (targetAlt - altShown) * (1 - Math.pow(0.02, dt)); applyEnv(altShown);
   // camera target follows the tower top (or a focused stone)
-  const wantY = focusStone ? focusStone.mesh.position.y : Math.max(1.8, towerTop - 2.4);
+  // Keep the top of the tower in the upper half of the screen (the form covers the bottom third), even for a tiny tower.
+  const wantY = focusStone ? focusStone.mesh.position.y : Math.max(0.3, towerTop - 1.9);
   camTarget.lerp(new THREE.Vector3(0, wantY, 0), 1 - Math.pow(0.001, dt));
   controls.target.copy(camTarget);
-  if (focusT > 0) { focusT -= dt; const want = focusStone ? Math.max(4.5, focusStone.rx * 6) : 12; const d = camera.position.distanceTo(controls.target); if (Math.abs(d - want) > 0.05) { camera.position.sub(controls.target).multiplyScalar(1 + (want - d) / d * (1 - Math.pow(0.02, dt))).add(controls.target); } }
+  if (focusT > 0 || !focusStone) { if (focusT > 0) focusT -= dt; const want = focusStone ? Math.max(4.5, focusStone.rx * 6) : Math.min(12, 6 + towerTop * 0.45); const d = camera.position.distanceTo(controls.target); if (Math.abs(d - want) > 0.05) { camera.position.sub(controls.target).multiplyScalar(1 + (want - d) / d * (1 - Math.pow(0.02, dt))).add(controls.target); } }
   controls.update();
   composer.render();
   if (tipFor) placeTip();
