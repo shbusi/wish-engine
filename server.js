@@ -672,6 +672,8 @@ export const server = http.createServer(async (req, res) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   server.listen(PORT, () => {
     console.log(`Wish Cairn · ${APP_URL()} · ${count()} stones · providers: ${enabledProviders().join(",") || "none"} · chain: ${chain() ? chain().network : "off"}`);
+    // Telegram investor bot (invest-bot.js): on when TELEGRAM_BOT_TOKEN is set
+    if (process.env.TELEGRAM_BOT_TOKEN) import("./invest-bot.js").then((m) => m.start()).catch((e) => console.error("invest bot failed to start:", e.message));
     // X autopost: X_AUTOPOST=HH:MM (UTC) runs tools/post-x.mjs once a day with the X_* keys from the environment.
 if (process.env.X_AUTOPOST && process.env.X_API_KEY) {
   const [hh, mm] = process.env.X_AUTOPOST.split(":").map(Number);

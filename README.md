@@ -209,6 +209,20 @@ choice, the browser's language list (`pt-BR` → pt, `zh-TW` → zh), else Engli
 does not have gets English. The 🌐 selector in the tower's top bar switches and remembers. Missing keys in any
 language fall back to English, so a partial translation never breaks the page.
 
+## Telegram investor bot: `invest-bot.js`
+
+Starts inside the server when `TELEGRAM_BOT_TOKEN` is set (or `node invest-bot.js`). Long polling, no framework.
+Commands: `/start` pitch and links · `/stats` live numbers from `/api/metrics` · `/how` how investing works in
+the current stage · `/wallet 0x…` register the sending wallet · `/invest` the treasury address and terms ·
+`/mine` receipts · `/tx 0x…` match a transfer by hash · `/ask` forwards a question to the operator ·
+`/investors` (operator only) the ledger. English and Korean by the user's Telegram language.
+
+It watches USDC `Transfer` events into `TREASURY` on `CHAIN_RPC_URL` every 30 s, records each one (sender, tx,
+amount), links it to the Telegram user who registered that wallet, confirms to them and alerts
+`TELEGRAM_ADMIN_ID`. Before the token stage a contribution is an early-supporter allocation at
+`INVEST_PRICE_USD` per token (default $0.02, the sale price), paid out from the sale allocation at the token
+stage; the bot states the terms and the refund rule in plain words. Tables live in the same SQLite file.
+
 ## Daily post to X: `tools/post-x.mjs`
 
 Posts "the tower is 1.08 m. +12 stones today. Sora stacked the top stone. Stack yours → …" with a fresh
