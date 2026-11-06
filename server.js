@@ -704,6 +704,17 @@ export const server = http.createServer(async (req, res) => {
       } catch (e) { return json(res, e.status ?? 400, { error: e.message }); }
     }
 
+    // Operator-only: post to X right now. POST /api/admin/post-x { lang, text, dry } (x-admin-token header or ?token=); X_* keys from the environment
+    if (req.method === "POST" && url.pathname === "/api/admin/post-x") {
+      const token = process.env.ADMIN_TOKEN;
+      if (!token || (req.headers["x-admin-token"] !== token && url.searchParams.get("token") !== token)) return json(res, 401, { error: "unauthorized" });
+      const b = await readBody(req); const args = [path.join(HERE, "tools", "post-x.mjs"), "--url", `http://127.0.0.1:${PORT}`, "--lang", /^(en|ko)$/.test(b.lang) ? b.lang : "en"];
+      if (typeof b.text === "string" && b.text.trim()) args.push("--text", b.text.slice(0, 280)); if (b.dry) args.push("--dry-run");
+      const { spawn } = await import("node:child_process");
+      const out = await new Promise((resolve) => { let o = ""; const c = spawn(process.execPath, args, { env: process.env }); c.stdout.on("data", (d) => (o += d)); c.stderr.on("data", (d) => (o += d)); const t = setTimeout(() => { c.kill(); resolve({ code: -1, o: o + "\n(timeout)" }); }, 120_000); c.on("exit", (code) => { clearTimeout(t); resolve({ code, o }); }); });
+      return json(res, out.code === 0 ? 200 : 502, { ok: out.code === 0, output: out.o.slice(-2000) });
+    }
+
     // Operator-only: remove a stone. DELETE /api/admin/stones?id=<id> (x-admin-token header or ?token=)
     if (req.method === "DELETE" && url.pathname === "/api/admin/stones") {
       const token = process.env.ADMIN_TOKEN;

@@ -46,7 +46,8 @@ const TEXT = {
   en: `${dayN ? `Day ${dayN}: ` : ""}the tower is ${height} m. ${today ? `+${today} stones today. ` : ""}${top?.name ? `${top.name} stacked the top stone.` : ""}\n\nStack yours → ${site}`,
   ko: `${dayN ? `${dayN}일째: ` : ""}탑 ${height} m. ${today ? `오늘 +${today}개. ` : ""}${top?.name ? `맨 위 돌은 ${top.name}님이 올렸습니다.` : ""}\n\n내 돌 올리기 → ${site}`,
 };
-const text = (TEXT[LANG] ?? TEXT.en).replace(/ +\n/g, "\n").trim();
+const custom = arg("text", process.env.X_TEXT ?? ""); // --text "…" posts your own words instead of today's tower line
+const text = (typeof custom === "string" && custom.trim() ? custom : (TEXT[LANG] ?? TEXT.en)).replace(/ +\n/g, "\n").trim();
 
 // screenshot of the tower (portrait 4:5), deterministic via the page's video mode
 let image = null;
@@ -59,6 +60,7 @@ if (!NO_IMAGE) {
     for (let i = 0; i < 24; i++) await p.evaluate(() => window.__video.step(1 / 24)); // let the camera settle
     image = await p.screenshot({ type: "png" }); await b.close();
   } catch (e) { console.warn("no screenshot (playwright unavailable?):", e.message.slice(0, 120)); }
+  if (!image) { try { const r = await fetch(`${URL_}/assets/og.jpg`); if (r.ok) { image = Buffer.from(await r.arrayBuffer()); console.log("using the site card image"); } } catch {} } // e.g. on the server, where Playwright is not installed
 }
 if (DRY) { console.log("--- would post ---\n" + text); if (image) { mkdirSync("out", { recursive: true }); writeFileSync("out/x-post.png", image); console.log("--- image saved to out/x-post.png"); } process.exit(0); }
 

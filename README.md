@@ -238,6 +238,11 @@ the free tier allows this once a day), optionally `X_SITE_URL`, `X_LANG=en|ko`, 
 OAuth 1.0a signer against X's documented example. Media goes through `POST /2/media/upload`, the post through
 `POST /2/tweets`.
 
+**Post right now, from anywhere:** `POST /api/admin/post-x` with the admin token runs the same tool on the server
+(`{"lang":"ko","text":"your own words","dry":true}` previews; omit `dry` to post). Without Playwright on the server the
+post carries the site card image (`assets/og.jpg`) instead of a fresh screenshot. `--text` / `X_TEXT` work the same way
+on the command line.
+
 ## Launch clip: `tools/make-video.mjs`
 
 Renders a vertical 1080×1920 MP4 of stones dropping onto the live tower, for X / TikTok / Shorts:
