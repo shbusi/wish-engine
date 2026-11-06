@@ -12,7 +12,7 @@
 const { ethers, network } = require("hardhat");
 const fs = require("node:fs");
 
-const env = (k, d) => process.env[k] ?? d;
+const env = (k, d) => { const v = (process.env[k] ?? "").trim(); return v && v !== "0x..." ? v : d; }; // blank or placeholder → default
 const BASE_STABLES = [
   { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, price: "100000" },   // $0.10
   { symbol: "EURC", address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6, price: "92000" },    // €0.092
