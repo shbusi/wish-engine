@@ -7,7 +7,7 @@
 import { SOIL_PROFILES, SPECIES, CLIMATE, textureClass } from "./agri.js";
 export { SOIL_PROFILES, SPECIES, CLIMATE };
 
-export const RADIUS_MIN = 3.6, RADIUS_MAX = 12, MIN_GAP = 0.9; // where you may plant (world units around the tower base)
+export const RADIUS_MIN = 3.6, RADIUS_MAX = 26, MIN_GAP = 0.9; // where you may plant (world units around the tower base)
 export const GARDEN_DAYS_PER_DAY = 7;
 export const MULCH_DAYS = 5;                                   // real days a mulch lasts
 export const STAGES = [0, 0.001, 1, 2.5, 5, 9];                // growth units for stage 0..5: seed · sprout · seedling · sapling · young plant · in bloom
@@ -25,8 +25,8 @@ function vnoise(x, z) {
 export function soilAt(x, z) {
   const n = vnoise(x * 0.23 + 3.1, z * 0.23 + 7.7) * 0.7 + vnoise(x * 0.6, z * 0.6) * 0.3;
   const ang = Math.atan2(z, x), r = Math.hypot(x, z);
-  const riverR = 7.4 + Math.sin(ang * 2.3 + 0.8) * 1.6 + Math.sin(ang * 5.1) * 0.5;
-  if (Math.abs(r - riverR) < 0.75) return "river";
+  const riverR = 7.4 + Math.sin(ang * 2.3 + 0.8) * 1.6 + Math.sin(ang * 5.1) * 0.5, riverR2 = 17.5 + Math.sin(ang * 1.7 + 2.1) * 2.4 + Math.sin(ang * 4.3) * 0.6; // two brooks: near the base and further out
+  if (Math.abs(r - riverR) < 0.75 || Math.abs(r - riverR2) < 0.9) return "river";
   if (n < 0.36) return "rocky";
   if (n > 0.66) return "moss";
   return "meadow";
