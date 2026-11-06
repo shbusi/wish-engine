@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { chain, chainPublic, signVoucher, preparePending, startIndexer } from "./chain-link.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DB_PATH = process.env.DB_PATH ?? "cairn.db";
@@ -55,9 +56,18 @@ db.exec(`
 try { db.exec("ALTER TABLE stones ADD COLUMN wallet_id INTEGER"); } catch {}
 try { db.exec("ALTER TABLE stones ADD COLUMN paid INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE stones ADD COLUMN bot INTEGER NOT NULL DEFAULT 0"); } catch {} // seeded by tools/seed-users.mjs; never exposed by the API
+try { db.exec("ALTER TABLE stones ADD COLUMN chain_id INTEGER"); } catch {}           // StoneCairn token id when the stone was stacked on-chain
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS stones_chain ON stones(chain_id)"); } catch {}
+db.exec(`CREATE TABLE IF NOT EXISTS pending_chain (wish_hash TEXT PRIMARY KEY, wish TEXT NOT NULL, name TEXT, wallet_id INTEGER, created_at INTEGER NOT NULL)`);
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, created_at) VALUES (?, ?, ?, ?, ?)"),
   insertBot: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, bot, created_at) VALUES (?, ?, NULL, 0, 1, ?)"),
+  insertChain: db.prepare("INSERT OR IGNORE INTO stones (name, wish, wallet_id, paid, bot, chain_id, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)"),
+  byChain: db.prepare("SELECT id FROM stones WHERE chain_id = ?"),
+  pendingPut: db.prepare("INSERT OR REPLACE INTO pending_chain (wish_hash, wish, name, wallet_id, created_at) VALUES (?, ?, ?, ?, ?)"),
+  pendingGet: db.prepare("SELECT * FROM pending_chain WHERE wish_hash = ?"),
+  pendingDel: db.prepare("DELETE FROM pending_chain WHERE wish_hash = ?"),
+  lastChain: db.prepare("SELECT MAX(chain_id) AS n FROM stones"),
   botCount: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE bot = 1"),
   recent: db.prepare("SELECT id, name, wish, created_at FROM stones ORDER BY id DESC LIMIT ?"),
   after: db.prepare("SELECT id, name, wish, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
@@ -81,6 +91,20 @@ export const recent = (n = 40) => q.recent.all(Math.min(Math.max(1, n), 200)).re
 export const after = (id, n = 100) => q.after.all(Number(id) || 0, Math.min(n, 500));
 export const stoneById = (id) => q.one.get(Number(id) || 0);
 export const botCount = () => q.botCount.get().n;
+
+/** A stone stacked on-chain (from the indexer). The wish text comes from the pending record the page registered. */
+export function addChainStone({ tokenId, name, wishHash, free, at }) {
+  if (q.byChain.get(tokenId)) return null;
+  const p = q.pendingGet.get(wishHash);
+  const wish = p?.wish ?? "(a wish sealed on-chain)";
+  const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, at ?? Date.now());
+  if (p) q.pendingDel.run(wishHash);
+  if (r.changes === 0) return null;
+  const stone = q.one.get(Number(r.lastInsertRowid));
+  broadcast({ type: "stone", stone, ...stats() });
+  return stone;
+}
+export const lastChainId = () => q.lastChain.get().n ?? 0;
 
 /** Seed stone (virtual early user). `createdAt` in the past = backfill; omitted = now. */
 export function addSeedStone({ name, wish, createdAt }) {
@@ -199,6 +223,7 @@ function limited(ip, key = "", max = RATE_PER_MIN) {
 const MIME = { ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".hdr": "application/octet-stream", ".glb": "model/gltf-binary", ".ktx2": "image/ktx2" };
 const STATIC = [
   { prefix: "/vendor/three/", root: path.join(HERE, "node_modules", "three"), allow: /^(build|examples\/jsm)\// },
+  { prefix: "/vendor/ethers/", root: path.join(HERE, "node_modules", "ethers"), allow: /^dist\/ethers\.min\.js$/ },
   { prefix: "/assets/", root: path.join(HERE, "assets"), allow: /^[^.]/ },
 ];
 function serveStatic(req, res, url) {
@@ -247,7 +272,25 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/me") {
       const [w, setCookie] = wallet(req);
-      return json(res, 200, { wallet: walletState(w), pack: PACK, providers: enabledProviders(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
+      return json(res, 200, { wallet: walletState(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
+    }
+
+    // ---- on-chain stacking: register the wish text (only its hash goes on-chain), get a free-stone voucher
+    if (req.method === "POST" && url.pathname === "/api/chain/prepare") {
+      if (!chain()) return json(res, 404, { error: "no_chain" });
+      if (limited(ip, "prep", 20)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      const { wish, name, address, wantFree } = await readBody(req);
+      const cleanWish = String(wish ?? "").replace(/\s+/g, " ").trim();
+      const cleanName = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
+      if (cleanWish.length < 2 || cleanWish.length > 140 || /https?:\/\/|www\./i.test(cleanWish + cleanName)) return json(res, 400, { error: "rejected" });
+      if (!/^0x[0-9a-fA-F]{40}$/.test(String(address ?? ""))) return json(res, 400, { error: "bad_address" });
+      const { wishHash, salt } = preparePending(cleanWish);
+      q.pendingPut.run(wishHash, cleanWish, cleanName || null, w.id, Date.now());
+      let voucher = null;
+      // The daily free stone works on-chain too: consume the web2 free slot and hand back a signed voucher.
+      if (wantFree && w.free_at <= Date.now() && q.useFree.run(Date.now() + FREE_EVERY_MS, w.id, Date.now()).changes === 1) voucher = await signVoucher(address);
+      return json(res, 200, { wishHash, salt, name: cleanName, voucher, wallet: walletState(q.walletById.get(w.id)) }, setCookie ? { "Set-Cookie": setCookie } : {});
     }
 
     if (req.method === "GET" && url.pathname === "/api/stones") {
@@ -325,5 +368,8 @@ export const server = http.createServer(async (req, res) => {
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  server.listen(PORT, () => console.log(`Wish Cairn · ${APP_URL()} · ${count()} stones · providers: ${enabledProviders().join(",") || "none"}`));
+  server.listen(PORT, () => {
+    console.log(`Wish Cairn · ${APP_URL()} · ${count()} stones · providers: ${enabledProviders().join(",") || "none"} · chain: ${chain() ? chain().network : "off"}`);
+    if (chain()) startIndexer({ onStacked: addChainStone, fromTokenId: lastChainId() + 1 });
+  });
 }

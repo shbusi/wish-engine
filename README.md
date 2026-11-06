@@ -63,6 +63,26 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 - A $0.99 pack is the smallest amount that survives PayPal's fixed fee; a single ₩100 stone would not.
   Crypto (USDC on an L2) can be added as a third provider with the same `checkout → settleOrder` shape.
 
+## On-chain layer (Base L2): stone NFTs, CAIRN token, public sale
+
+`chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 10 tests, compiles offline).
+
+- **StoneCairn** (ERC-721): every stone is an NFT. `stack()` pays USDC ($0.10), split 50/50 between the
+  treasury and a buyback pool that buys and burns CAIRN. `stackFree()` redeems an EIP-712 voucher the
+  server signs for the daily free stone, so web2 and chain share one rule. Only the wish's hash goes on-chain.
+- **CairnToken** (ERC-20): fixed 1B supply minted once (community 40 / sale 25 / team 15 / treasury 15 / liquidity 5),
+  no owner, no mint. Team tokens sit in OpenZeppelin's VestingWallet, 24 months linear.
+- **CairnSale**: fixed-price USDC sale with soft cap, hard cap, per-wallet cap and a window. Soft cap missed →
+  full refunds; funds never reach the treasury before finalization.
+- Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
+  `chain/deployments/<network>.json`).
+
+Server side (`chain-link.js`): set `CHAIN_DEPLOYMENT=chain/deployments/base.json`, `CHAIN_RPC_URL`, and
+`VOUCHER_SIGNER_KEY` (the key whose address was deployed as the contract's voucher signer). The server then
+exposes the chain config on `/api/me`, registers wish text + salt for a hash on `POST /api/chain/prepare`, and
+indexes `Stacked` events so on-chain stones land on the same tower. In the page, "Stack on-chain" connects a
+wallet (ethers v6) and calls `stackFree` with a voucher or approves USDC and calls `stack`.
+
 ## Virtual early users (seeding)
 
 An empty tower is the worst first impression. `tools/seed-users.mjs` creates virtual early users:
@@ -117,5 +137,8 @@ server.js                 SQLite stones + wallets + orders · /api/me · GET/POS
 index.html                the 3D scene, UI, live updates (one file, ES modules via import map)
 tools/generate-assets.mjs generative asset pipeline → assets/manifest.json
 tools/seed-users.mjs      virtual early users: Claude-written wishes, backfill + live modes
+chain-link.js             chain config, EIP-712 voucher signing, Stacked event indexer
+chain/                    Hardhat project: StoneCairn, CairnToken, CairnSale, tests, deploy script
+docs/TOKEN.md             tokenomics and raise structure
 test.js                   validation, ordering, HTTP + SSE round-trip
 ```

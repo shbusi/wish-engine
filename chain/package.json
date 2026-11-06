@@ -1,0 +1,17 @@
+{
+  "name": "wish-cairn-chain",
+  "private": true,
+  "description": "On-chain layer for Wish Cairn: stone NFTs, CAIRN token, public sale with refunds, team vesting. Base L2.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network baseSepolia",
+    "deploy:base": "hardhat run scripts/deploy.js --network base"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.6.1",
+    "hardhat": "^2.29.1",
+    "solc": "^0.8.28"
+  }
+}
