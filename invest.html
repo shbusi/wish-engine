@@ -35,7 +35,7 @@
 <main>
   <header>
     <h1>🪨 Wish Cairn <small data-i18n="sub">Invest · stake CAIRN, earn the tower's revenue</small></h1>
-    <div class="row" style="margin:0"><a href="/" data-i18n="back">← Tower</a> <a id="overviewLink" href="/investors" data-i18n="overview">Overview</a> <button class="btn" id="connect" data-i18n="connect">Connect wallet</button></div>
+    <div class="row" style="margin:0"><a href="/" id="towerLink" data-i18n="back">← Tower</a> <a id="overviewLink" href="/investors" data-i18n="overview">Overview</a> <button class="btn" id="connect" data-i18n="connect">Connect wallet</button></div>
   </header>
 
   <div class="grid">
@@ -88,10 +88,11 @@ const T = {
   en: { sub:"Invest · stake CAIRN, earn the tower's revenue", back:"← Tower", overview:"Overview", connect:"Connect wallet", connected:(a)=>a, height:"Tower height", distributed:"Distributed to stakers (lifetime)", totalStaked:"Total staked", noWallet:"Connect a wallet to see your position. Revenue is paid in the stablecoins stones were bought with (USDC, EURC, JPYC, BRZ …), pro-rata to staked CAIRN.", yourPosition:"Your position", cairnWallet:"CAIRN in wallet", cairnStaked:"CAIRN staked", stake:"Stake", unstake:"Unstake", max:"Max", claimable:"Claimable revenue", claimAll:"Claim all", coin:"Coin", yours:"Yours", lifetime:"Lifetime distributed", sale:"Public sale", buy:"Buy CAIRN", claimTokens:"Claim tokens", refund:"Refund", stones:(n)=>`${n.toLocaleString()} stones`, split:(b)=>`${b/100}% of every stone goes to stakers`, share:(p)=>`your share ${p}%`, confirm:"Confirm in your wallet…", done:"Done", failed:"Transaction failed", noChain:"The on-chain layer is not configured on this server.", wrongChain:"Please switch your wallet to the right network", noWallet2:"No wallet found.", getWallet:"Get a wallet", openIn:"Open this page in a wallet app:", pickWallet:"Choose a wallet", cancel:"Cancel", rejected:"Connection was rejected in the wallet", view:"view", open:"Open", closed:"Closed", upcoming:"Starts", ended:"Ended", raised:(r,s,h)=>`raised $${r} · soft cap $${s} · hard cap $${h}`, endsIn:(t)=>`ends in ${t}`, startsIn:(t)=>`starts in ${t}`, quote:(n)=>`≈ ${n} CAIRN`, carried:"Revenue that arrived while nobody was staked is held and paid out with the next distribution.", success:"Sale succeeded — claim your tokens.", refunding:"Soft cap missed — refunds are open." },
   ko: { sub:"투자 · CAIRN을 스테이킹하고 탑의 매출을 받으세요", back:"← 탑으로", overview:"소개", connect:"지갑 연결", connected:(a)=>a, height:"탑 높이", distributed:"스테이커 누적 분배", totalStaked:"총 스테이킹", noWallet:"지갑을 연결하면 내 포지션이 보입니다. 매출은 돌을 산 스테이블코인(USDC·EURC·JPYC·BRZ…) 그대로, 스테이킹 비율대로 분배됩니다.", yourPosition:"내 포지션", cairnWallet:"지갑의 CAIRN", cairnStaked:"스테이킹한 CAIRN", stake:"스테이킹", unstake:"해제", max:"최대", claimable:"청구 가능 매출", claimAll:"모두 청구", coin:"코인", yours:"내 몫", lifetime:"누적 분배", sale:"공개 세일", buy:"CAIRN 구매", claimTokens:"토큰 받기", refund:"환불", stones:(n)=>`돌 ${n.toLocaleString()}개`, split:(b)=>`돌 매출의 ${b/100}%가 스테이커에게`, share:(p)=>`내 지분 ${p}%`, confirm:"지갑에서 확인해주세요…", done:"완료", failed:"트랜잭션 실패", noChain:"이 서버에는 온체인 설정이 없습니다.", wrongChain:"지갑 네트워크를 바꿔주세요", noWallet2:"지갑이 없어요.", getWallet:"지갑 받기", openIn:"이 페이지를 지갑 앱에서 열기:", pickWallet:"지갑을 고르세요", cancel:"취소", rejected:"지갑에서 연결을 거절했어요", view:"보기", open:"진행 중", closed:"종료", upcoming:"예정", ended:"마감", raised:(r,s,h)=>`모금 $${r} · 소프트캡 $${s} · 하드캡 $${h}`, endsIn:(t)=>`${t} 후 마감`, startsIn:(t)=>`${t} 후 시작`, quote:(n)=>`≈ ${n} CAIRN`, carried:"스테이커가 없을 때 들어온 매출은 보관됐다가 다음 분배에 합산됩니다.", success:"세일 성공 — 토큰을 받아가세요.", refunding:"소프트캡 미달 — 환불이 열렸습니다." },
 };
-const L = new URLSearchParams(location.search).get("lang") === "ko" ? "ko" : "en";
+const { pickLang, setLang, langHref } = await import("/i18n.js");
+const L = pickLang(["en", "ko"]);
 const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
 document.documentElement.lang = L;
-if (L === "ko") document.getElementById("overviewLink").href = "/investors?lang=ko";
+document.getElementById("overviewLink").href = langHref("/investors", L);
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 2) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
@@ -102,7 +103,7 @@ const W = await import("/wallet.js");
 const me = await fetch("/api/me").then((r) => r.json());
 const cfg = me.chain;
 if (!cfg) { $("noWallet").innerHTML = `<p class="muted">${t("noChain")}</p>`; $("connect").disabled = true; }
-$("flow").textContent = cfg ? `stone (${cfg.stables.map((s) => s.symbol).join(" / ")}) ──${100 - cfg.revenueBps / 100}%──▶ treasury\n                        └──${cfg.revenueBps / 100}%──▶ RevenueShare ──▶ CAIRN stakers, same coin` : "";
+if ($("flow")) $("flow").textContent = cfg ? `stone (${cfg.stables.map((s) => s.symbol).join(" / ")}) ──${100 - cfg.revenueBps / 100}%──▶ treasury\n                        └──${cfg.revenueBps / 100}%──▶ RevenueShare ──▶ CAIRN stakers, same coin` : "";
 
 const SALE_ABI = ["function price() view returns (uint256)", "function softCap() view returns (uint256)", "function hardCap() view returns (uint256)", "function maxPerWallet() view returns (uint256)", "function start() view returns (uint64)", "function end() view returns (uint64)", "function raised() view returns (uint256)", "function finalized() view returns (bool)", "function refunding() view returns (bool)", "function paid(address) view returns (uint256)", "function owed(address) view returns (uint256)", "function isOpen() view returns (bool)", "function quote(uint256) view returns (uint256)", "function buy(uint256)", "function claim()", "function refund()", "function finalize()"];
 const TOKEN_ABI = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)", "function decimals() view returns (uint8)"];

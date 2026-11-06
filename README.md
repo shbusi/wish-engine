@@ -131,6 +131,25 @@ link; it adds the sources table and `GET /api/analytics.csv` (daily rows, 90 day
 from every visitor metric and never labelled. The chart palette was validated for colour-vision deficiency on the
 dark surface.
 
+## Languages
+
+The tower page ships in English, Korean, Japanese, Spanish, Portuguese and Chinese; the investor pages in English
+and Korean. `i18n.js` picks the language in this order: `?lang=` in the URL (then remembered), the visitor's saved
+choice, the browser's language list (`pt-BR` → pt, `zh-TW` → zh), else English. A visitor whose language the page
+does not have gets English. The 🌐 selector in the tower's top bar switches and remembers. Missing keys in any
+language fall back to English, so a partial translation never breaks the page.
+
+## Daily post to X: `tools/post-x.mjs`
+
+Posts "the tower is 1.08 m. +12 stones today. Sora stacked the top stone. Stack yours → …" with a fresh
+portrait screenshot of the tower. Set `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` (an X
+developer app with **Read and Write** user permission; regenerate the access token after switching to read/write;
+the free tier allows this once a day), optionally `X_SITE_URL`, `X_LANG=en|ko`, `X_DAY0=<launch date>` for the
+"Day N" prefix. Then either run it from cron, or set `X_AUTOPOST=HH:MM` (UTC) and the server runs it daily.
+`--dry-run` prints the text and saves the image to `out/x-post.png` without posting; `--selftest` checks the
+OAuth 1.0a signer against X's documented example. Media goes through `POST /2/media/upload`, the post through
+`POST /2/tweets`.
+
 ## Launch clip: `tools/make-video.mjs`
 
 Renders a vertical 1080×1920 MP4 of stones dropping onto the live tower, for X / TikTok / Shorts:

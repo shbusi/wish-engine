@@ -426,9 +426,9 @@ export const server = http.createServer(async (req, res) => {
       return res.end([cols.join(","), ...a.series.map((r) => cols.map((c) => r[c]).join(","))].join("\n"));
     }
     if (req.method === "GET" && url.pathname === "/api/metrics") return json(res, 200, { ...metrics(), chain: chainPublic() }, { "Cache-Control": "public, max-age=60" });
-    if (url.pathname === "/wallet.js") {
+    if (url.pathname === "/wallet.js" || url.pathname === "/i18n.js") {
       res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-cache" });
-      return res.end(page("wallet.js"));
+      return res.end(page(url.pathname.slice(1)));
     }
 
     if (req.method === "GET" && url.pathname === "/api/me") {
@@ -541,6 +541,17 @@ export const server = http.createServer(async (req, res) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   server.listen(PORT, () => {
     console.log(`Wish Cairn · ${APP_URL()} · ${count()} stones · providers: ${enabledProviders().join(",") || "none"} · chain: ${chain() ? chain().network : "off"}`);
-    if (chain()) startIndexer({ onStacked: addChainStone, fromTokenId: lastChainId() + 1 });
+    // X autopost: X_AUTOPOST=HH:MM (UTC) runs tools/post-x.mjs once a day with the X_* keys from the environment.
+if (process.env.X_AUTOPOST && process.env.X_API_KEY) {
+  const [hh, mm] = process.env.X_AUTOPOST.split(":").map(Number);
+  let lastDay = null;
+  setInterval(() => {
+    const d = new Date(); if (d.getUTCHours() !== hh || d.getUTCMinutes() !== mm || lastDay === d.getUTCDate()) return;
+    lastDay = d.getUTCDate();
+    import("node:child_process").then(({ spawn }) => { const c = spawn(process.execPath, [path.join(HERE, "tools", "post-x.mjs"), "--url", `http://127.0.0.1:${PORT}`], { stdio: "inherit", env: process.env }); c.on("exit", (code) => console.log(`x autopost exit ${code}`)); });
+  }, 30_000).unref();
+  console.log(`x autopost daily at ${process.env.X_AUTOPOST} UTC`);
+}
+if (chain()) startIndexer({ onStacked: addChainStone, fromTokenId: lastChainId() + 1 });
   });
 }
