@@ -2,7 +2,7 @@
 // Render a vertical (9:16) clip of stones dropping onto the live tower, for X / TikTok / Shorts.
 //
 //   node tools/make-video.mjs --url http://localhost:3000 --names "Sora,Minjun,Aroha,Diego,Yuki,Amara" \
-//        --seconds 18 --fps 24 --caption "wishcairn.app" --sub "one tower, stacked by the whole world" --out out/tower.mp4
+//        --seconds 18 --fps 24 --caption "wishcairn.app" --sub "a tower to the firmament" --out out/tower.mp4
 //
 // How: opens the tower page in headless Chromium with ?video=1 (the page stops animating on its own and exposes
 // window.__video), steps the simulation one frame at a time, screenshots every frame and pipes them into ffmpeg.

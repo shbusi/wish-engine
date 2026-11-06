@@ -11,7 +11,7 @@
 **1/**
 Humans have stacked stones to make a wish for thousands of years. Korea, Tibet, Scotland, the Andes, Hawaii.
 
-We built one tower for all of us. It's {HEIGHT} m tall right now and it never stops growing.
+We built one tower for all of us, under the firmament, climbing toward the waters above. It's {HEIGHT} m right now and it never stops growing.
 
 Stack yours → {URL}
 [video: stones dropping onto the cairn, name engraving, height counter]
@@ -62,7 +62,7 @@ Day {D}: the tower is {HEIGHT} m. +{N} stones today. {CITY} stacked the top ston
 **1/**
 돌탑에 돌 하나 얹고 소원 비는 거, 우리만 하는 게 아닙니다. 티베트, 스코틀랜드, 안데스, 하와이도 합니다.
 
-그래서 전 세계가 함께 쌓는 탑을 하나 만들었습니다. 지금 {HEIGHT} m, 계속 올라갑니다.
+그래서 궁창 아래, 윗물을 향해 오르는 탑을 하나 만들었습니다. 전 세계가 함께 쌓습니다. 지금 {HEIGHT} m, 계속 올라갑니다.
 
 내 돌 올리기 → {URL}
 [영상]

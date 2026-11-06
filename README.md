@@ -28,6 +28,16 @@ npm test
 - **Older stones** (beyond the newest 20) become an instanced mound that grows up to meet the tower, so the tower never sinks as the window moves.
 - **Post**: ACES tone mapping, bloom, vignette. Mobile gets fewer particles, smaller shadow maps, lighter bloom.
 
+## The world: under the firmament
+
+The whole site is set beneath the biblical firmament: the waters were one, a firmament was set between them,
+and we live under it. Every stone is a wish sent upward; the tower climbs toward the waters above, and when it
+touches the firmament (250 m) the waters stir. That story is told once on the first visit (the 🌊 button reopens
+it, six languages), the HUD always shows the distance to the firmament in metres and stones, the page title and
+share cards carry "Under the Firmament", and the sky shows it from the ground: a faint caustic shimmer of the
+upper waters at the zenith even in the meadow, a water ceiling that hangs high over a small tower and comes
+down to just overhead as the tower climbs, drops falling past the stones only in the last band.
+
 ## The climb: the world changes with height
 
 Height is the tower's cumulative height (stones × 9 cm), so the scene can rise even though only the newest
