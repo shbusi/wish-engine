@@ -25,6 +25,9 @@ export const FREE_BLESS_PER_DAY = Number(process.env.FREE_BLESS_PER_DAY ?? 3);
 export const FIRMAMENT_M = Number(process.env.FIRMAMENT_M ?? 250);
 // The donation pledge, as shown to visitors and investors. On-chain it is enforced by StoneCairn (DONATION / DONATION_BPS at deploy);
 // for web (PayPal) revenue the operator transfers DONATION_BPS of each month's packs and the dashboard shows the pledged amount.
+// Karma: one good deed per stone placed and per blessing given. Tiers are names, not powers (yet).
+export const KARMA_TIERS = [1, 10, 50, 200];                         // pebble · cairn-keeper · mountain · firmament
+export const KARMA_AB = process.env.KARMA_AB === "1";                 // when on, odd wallet ids do not see the karma UI (A/B test)
 export const DONATION = { bps: Number(process.env.DONATION_BPS ?? 1000), name: process.env.DONATION_NAME ?? "", url: process.env.DONATION_URL ?? "" };
 export const FIRMAMENT_REWARD = Number(process.env.FIRMAMENT_REWARD ?? 1);
 export const FIRMAMENT_KEYSTONE_REWARD = Number(process.env.FIRMAMENT_KEYSTONE_REWARD ?? 10); // blessings a wallet may give per day before they cost a stone
@@ -83,6 +86,7 @@ db.exec("CREATE INDEX IF NOT EXISTS visits_day ON visits(day)");
 db.exec(`CREATE TABLE IF NOT EXISTS events (type TEXT PRIMARY KEY, at INTEGER NOT NULL, total INTEGER NOT NULL, stone_id INTEGER, wallets INTEGER NOT NULL DEFAULT 0, credits INTEGER NOT NULL DEFAULT 0)`);
 try { db.exec("ALTER TABLE stones ADD COLUMN keystone INTEGER NOT NULL DEFAULT 0"); } catch {}   // the stone that touched the firmament
 try { db.exec("ALTER TABLE wallets ADD COLUMN seen_event INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN karma INTEGER NOT NULL DEFAULT 0"); } catch {}      // good deeds: stones placed + blessings given
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
@@ -135,8 +139,11 @@ const q = {
   walletByToken: db.prepare("SELECT * FROM wallets WHERE token = ?"),
   walletById: db.prepare("SELECT * FROM wallets WHERE id = ?"),
   newWallet: db.prepare("INSERT INTO wallets (token, created_at) VALUES (?, ?)"),
-  useFree: db.prepare("UPDATE wallets SET free_at = ?, placed = placed + 1 WHERE id = ? AND free_at <= ?"),
-  useCredit: db.prepare("UPDATE wallets SET credits = credits - 1, placed = placed + 1 WHERE id = ? AND credits >= 1"),
+  useFree: db.prepare("UPDATE wallets SET free_at = ?, placed = placed + 1, karma = karma + 1 WHERE id = ? AND free_at <= ?"),
+  useCredit: db.prepare("UPDATE wallets SET credits = credits - 1, placed = placed + 1, karma = karma + 1 WHERE id = ? AND credits >= 1"),
+  addKarma: db.prepare("UPDATE wallets SET karma = karma + ? WHERE id = ?"),
+  karmaTotal: db.prepare("SELECT COALESCE(SUM(karma), 0) AS n FROM wallets"),
+  abGroups: db.prepare("SELECT (id % 2) AS grp, COUNT(*) AS wallets, SUM(CASE WHEN placed > 0 THEN 1 ELSE 0 END) AS activated, SUM(placed) AS stones, SUM(CASE WHEN EXISTS (SELECT 1 FROM orders o WHERE o.wallet_id = wallets.id AND o.status = 'PAID') THEN 1 ELSE 0 END) AS paid FROM wallets WHERE created_at >= ? GROUP BY grp"),
   addCredits: db.prepare("UPDATE wallets SET credits = credits + ? WHERE id = ?"),
   newOrder: db.prepare("INSERT INTO orders (id, wallet_id, provider, provider_ref, stones, usd, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'CREATED', ?)"),
   order: db.prepare("SELECT * FROM orders WHERE id = ?"),
@@ -165,6 +172,7 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, at ?? Date.now());
   if (p) q.pendingDel.run(wishHash);
   if (r.changes === 0) return null;
+  if (p?.wallet_id) q.addKarma.run(1, p.wallet_id);
   const stone = pub(q.one.get(Number(r.lastInsertRowid)));
   broadcast({ type: "stone", stone, ...stats() });
   checkFirmament(stone.id);
@@ -192,7 +200,9 @@ export const walletByToken = (t) => (t ? q.walletByToken.get(t) : undefined);
 const dayOf = (ms) => Math.floor(ms / 86_400_000);
 export function walletState(w, now = Date.now()) {
   const blessFreeLeft = w.bless_day === dayOf(now) ? Math.max(0, FREE_BLESS_PER_DAY - w.bless_n) : FREE_BLESS_PER_DAY;
-  return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM, blessFreeLeft, blessed: q.blessedByMe.all(w.id).map((r) => r.stone_id) };
+  const karma = w.karma ?? 0, tier = KARMA_TIERS.filter((k) => karma >= k).length; // 0 = none yet, 1..4
+  return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM, blessFreeLeft, blessed: q.blessedByMe.all(w.id).map((r) => r.stone_id),
+    karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0 };
 }
 /** Blessings on this wallet's stones since it last asked, then mark them seen. */
 export function newBlessings(w, now = Date.now()) {
@@ -258,7 +268,7 @@ export function bless(wallet, stoneId, now = Date.now()) {
   if (used < FREE_BLESS_PER_DAY) q.blessDay.run(today, used + 1, wallet.id);
   else if (q.spendCredit.run(wallet.id).changes === 1) free = false;
   else { q.unbless.run(st.id, wallet.id); throw Object.assign(new Error("need_credits"), { status: 402 }); }
-  q.countBless.run(st.id);
+  q.countBless.run(st.id); q.addKarma.run(1, wallet.id);
   const stone = pub(q.one.get(st.id));
   broadcast({ type: "bless", id: stone.id, blessings: stone.blessings });
   return { stone, free, wallet: walletState(q.walletById.get(wallet.id), now) };
@@ -427,11 +437,13 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   const all = q.aCohort.all(fromMs, now + 1);
   const funnel = { wallets: all.length, activated: all.filter((r) => r.activated).length, paid: all.filter((r) => r.paid).length };
   const totalSecs = series.reduce((a, r) => a + r.secs * r.visits, 0), totalVisits = sum("visits", series);
-  const v = { days, series, growth, retention, funnel, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
+  const ab = KARMA_AB ? Object.fromEntries(q.abGroups.all(fromMs).map((r) => [r.grp === 0 ? "karmaOn" : "karmaOff", { wallets: r.wallets, activated: r.activated, stones: r.stones ?? 0, paid: r.paid }])) : null;
+  const v = { days, series, growth, retention, funnel, ab, karmaTotal: q.karmaTotal.get().n, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
   analyticsCache.set(key, { at: now, v });
   return v;
 }
-const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
+const givingUsd = () => { const b = q.mBuyers.get(); return Math.round(b.usd * DONATION.bps) / 10000; }; // web packs only; on-chain giving is read from the chain by the pages
+const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM, firmamentM: FIRMAMENT_M, giving: { usd: givingUsd(), bps: DONATION.bps, name: DONATION.name, url: DONATION.url }, karmaTotal: q.karmaTotal.get().n, karmaTiers: KARMA_TIERS, firmament: q.eventGet.get("firmament") ? { at: q.eventGet.get("firmament").at, stoneId: q.eventGet.get("firmament").stone_id, wallets: q.eventGet.get("firmament").wallets } : null });
 
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");

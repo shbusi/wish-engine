@@ -139,6 +139,12 @@ and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes 
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
+**Karma**: one stone = one wish = one good deed. Every stone placed and every blessing given adds 1 karma to the
+wallet; tiers at 1 / 10 / 50 / 200 (pebble, cairn-keeper, mountain, firmament) are names shown in the HUD, with a
+toast on each step up. The HUD also shows what the tower has given so far (web pack revenue × the donation share;
+on-chain giving is read from the chain). `KARMA_AB=1` hides the karma and giving lines for odd wallet ids, and the
+analytics dashboard then shows activation, stones per wallet and purchase rate for the two groups.
+
 **Giving**: `DONATION_BPS` (10%) of every stone's revenue is given away, off the top. On-chain it is a contract rule
 (`StoneCairn.setCharity(wallet, bps)`, set from `DONATION`/`DONATION_BPS` at deploy): the share goes to the donation
 wallet in the same transaction as the purchase. For web packs the operator transfers the same share monthly and

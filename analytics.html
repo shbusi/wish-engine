@@ -61,6 +61,7 @@
     <div class="card"><h2 data-i18n="retTitle">Retention · new wishers who came back</h2><div class="grid" id="retention" style="margin:0"></div><p class="muted" id="retNote"></p></div>
   </div>
 
+  <div class="card hidden" id="abCard"><h2 data-i18n="abTitle">Karma UI test · wallets created in this period, by group</h2><table id="ab"></table><p class="muted" data-i18n="abNote">KARMA_AB=1 splits wallets by id: even ids see karma and giving, odd ids do not. Compare activation and purchase rates.</p></div>
   <div class="card" id="chainCard"><h2 data-i18n="chainTitle">Investment · on-chain</h2><div class="grid" id="chain" style="margin:0"></div></div>
   <div class="card hidden" id="sourcesCard"><h2 data-i18n="sourcesTitle">Traffic sources (operator only)</h2><table id="sources"></table></div>
   <div class="card hidden" id="tableCard"><h2 data-i18n="tableTitle">Daily table</h2><div style="overflow:auto"><table id="daily"></table></div></div>
@@ -75,11 +76,13 @@ const T = {
     kpi:{ visits:"Visits", uniques:"Unique wishers visiting", newWallets:"New wishers", stones:"Stones", revenue:"Revenue (USD)", blessings:"Blessings", time:"Avg time on page", activation:"Visit → stone", paidConv:"Wisher → buyer" }, prev:(v)=>`prev ${v}`, legend:{ visits:"Visits", uniques:"Unique wishers", stones:"Stones", paidStones:"of which paid", revenue:"Revenue", blessings:"Blessings", onchain:"On-chain stones" },
     funnel:["New wallets","Placed a stone","Bought a pack"], ret:{ d1:"Came back next day", d7:"Came back within 7 days", cohort:"Cohort size" }, retNote:(n)=>`Cohort: wishers whose first visit was in this period and at least 8 days ago (${n}).`,
     chain:{ raised:"Sale raised", staked:"CAIRN staked", stakers:"Distributed to stakers", onchain:"On-chain stones", none:"On-chain layer not configured" },
+    abTitle:"Karma UI test · wallets created in this period, by group", abNote:"KARMA_AB=1 splits wallets by id: even ids see karma and giving, odd ids do not. Compare activation and purchase rates.", abCols:["Group","Wallets","Placed a stone","Stones / wallet","Bought a pack"], abOn:"Karma shown", abOff:"Karma hidden",
     adminOn:"Operator view · ", adminOff:"Operator? ", adminBtn:"enter token", csv:"Download CSV", updated:(d)=>`updated ${d}`, src:{ source:"Source", visits:"Visits", uniques:"Unique", share:"Share" }, direct:"direct / unknown" },
   ko: { sub:"분석", tower:"← 탑으로", overview:"투자자 소개", tableView:"표로 보기", kpiTitle:"최근 7일 vs 그 전 7일", trafficTitle:"유입 · 일별 방문과 고유 방문자", stonesTitle:"방문자가 올린 돌 (일별)", revenueTitle:"팩 매출 (일별, USD)", engTitle:"참여 · 축복과 온체인 돌 (일별)", funnelTitle:"이 기간 퍼널 · 신규 지갑 → 돌 올림 → 결제", retTitle:"리텐션 · 신규 방문자 재방문", chainTitle:"투자 · 온체인", sourcesTitle:"유입 경로 (운영자 전용)", tableTitle:"일별 표", note:"방문자 지표에서 시드 콘텐츠는 제외됩니다. 방문은 외부 스크립트 없이 자체 비콘으로 셉니다. 1분마다 갱신.",
     kpi:{ visits:"방문", uniques:"고유 방문자", newWallets:"신규 방문자", stones:"돌", revenue:"매출 (USD)", blessings:"축복", time:"평균 체류", activation:"방문 → 돌", paidConv:"방문자 → 구매" }, prev:(v)=>`이전 ${v}`, legend:{ visits:"방문", uniques:"고유 방문자", stones:"돌", paidStones:"그중 유료", revenue:"매출", blessings:"축복", onchain:"온체인 돌" },
     funnel:["신규 지갑","돌 올림","팩 구매"], ret:{ d1:"다음 날 재방문", d7:"7일 내 재방문", cohort:"코호트 크기" }, retNote:(n)=>`코호트: 이 기간에 처음 왔고 8일 이상 지난 방문자 (${n}명).`,
     chain:{ raised:"세일 모금", staked:"스테이킹된 CAIRN", stakers:"스테이커 분배 누적", onchain:"온체인 돌", none:"온체인 레이어 미설정" },
+    abTitle:"카르마 UI 테스트 · 이 기간 신규 지갑, 그룹별", abNote:"KARMA_AB=1이면 지갑 id로 나눕니다. 짝수는 카르마·기부 표시, 홀수는 미표시. 활성화율과 구매율을 비교하세요.", abCols:["그룹","지갑","돌 올림","지갑당 돌","팩 구매"], abOn:"카르마 표시", abOff:"카르마 숨김",
     adminOn:"운영자 보기 · ", adminOff:"운영자? ", adminBtn:"토큰 입력", csv:"CSV 다운로드", updated:(d)=>`갱신 ${d}`, src:{ source:"경로", visits:"방문", uniques:"고유", share:"비중" }, direct:"직접 / 알 수 없음" },
 };
 const { pickLang, setLang, langHref } = await import("/i18n.js");
@@ -144,6 +147,8 @@ function render() {
   const R = t("ret"), rt = a.retention;
   $("retention").innerHTML = [[R.d1, rt.d1 == null ? "—" : `${fmt(rt.d1, 1)}%`], [R.d7, rt.d7 == null ? "—" : `${fmt(rt.d7, 1)}%`], [R.cohort, fmt(rt.cohort)]].map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
   $("retNote").textContent = t("retNote", rt.cohort);
+  $("abCard").classList.toggle("hidden", !a.ab);
+  if (a.ab) { const C = t("abCols"); $("ab").innerHTML = `<tr>${C.map((c, i) => `<th class="${i ? "n" : ""}">${c}</th>`).join("")}</tr>` + [["karmaOn", t("abOn")], ["karmaOff", t("abOff")]].map(([k, n]) => { const g = a.ab[k] ?? { wallets: 0, activated: 0, stones: 0, paid: 0 }; const pct = (x) => g.wallets ? `${fmt(x / g.wallets * 100, 1)}%` : "—"; return `<tr><td>${n}</td><td class="n">${fmt(g.wallets)}</td><td class="n">${pct(g.activated)}</td><td class="n">${g.wallets ? fmt(g.stones / g.wallets, 2) : "—"}</td><td class="n">${pct(g.paid)}</td></tr>`; }).join(""); }
   // sources (admin)
   $("adminBox").innerHTML = a.admin ? `${t("adminOn")}<a href="/api/analytics.csv?days=${days}&token=${encodeURIComponent(token)}">${t("csv")}</a>` : `${t("adminOff")}<a href="#" id="adminBtn">${t("adminBtn")}</a>`;
   $("adminBtn")?.addEventListener("click", (e) => { e.preventDefault(); const v = prompt("ADMIN_TOKEN"); if (v) { token = v; sessionStorage.setItem("cairn_admin", v); load(); } });

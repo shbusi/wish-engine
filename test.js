@@ -168,4 +168,16 @@ test("blessings: free per day then credits, once per stone, never your own, owne
   assert.equal(newBlessings(fan, t0 + 86_400_002), 1); assert.equal(newBlessings(fan, t0 + 86_400_003), 0, "marked seen");
 });
 
+test("karma: one per stone placed and per blessing given; tiers from the thresholds", async () => {
+  const a = createWallet(), b = createWallet(); const t0 = Date.now();
+  assert.equal(walletState(a).karma, 0); assert.equal(walletState(a).tier, 0); assert.equal(walletState(a).nextTier, 1);
+  const r = addStone(a, { wish: "first deed" }, t0);
+  assert.equal(r.wallet.karma, 1); assert.equal(r.wallet.tier, 1, "Pebble at 1");
+  const s2 = addStone(b, { wish: "other" }, t0).stone;
+  const bl = bless(a, s2.id, t0); assert.equal(bl.wallet.karma, 2);
+  assert.throws(() => bless(a, s2.id, t0), /already_blessed/);
+  assert.equal(walletState(S.walletByToken(a.token)).karma, 2, "no karma for a rejected blessing");
+  assert.equal(walletState(S.walletByToken(a.token)).karmaUi, true, "everyone sees it unless KARMA_AB=1");
+});
+
 after(() => server.close());
