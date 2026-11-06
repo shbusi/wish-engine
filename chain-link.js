@@ -47,7 +47,13 @@ export function preparePending(wish) {
   return { wishHash: ethers.keccak256(ethers.toUtf8Bytes(`${wish}|${salt}`)), salt };
 }
 
-const signer = process.env.VOUCHER_SIGNER_KEY ? new ethers.Wallet(process.env.VOUCHER_SIGNER_KEY) : null;
+// A placeholder left from the .env template ("0x<…>", "0x...", blank) or a malformed key must not take the whole site down:
+// the server runs with on-chain stacking off and says so in the log.
+const signer = (() => {
+  const k = (process.env.VOUCHER_SIGNER_KEY ?? "").trim();
+  if (!k || /[<>.]/.test(k)) { if (k) console.warn("VOUCHER_SIGNER_KEY looks like a placeholder; on-chain vouchers are off"); return null; }
+  try { return new ethers.Wallet(k); } catch { console.warn("VOUCHER_SIGNER_KEY is not a valid private key; on-chain vouchers are off"); return null; }
+})();
 export const voucherSignerAddress = () => signer?.address ?? null;
 /** EIP-712 voucher the contract's stackFree() accepts. One per (to, nonce). */
 export async function signVoucher(to, ttlSec = 15 * 60) {
