@@ -89,30 +89,40 @@ try:
             return pipe(prompt, width=width, height=height, generator=gen(seed), **params).images[0]
         return pipe(prompt, negative_prompt=NEG, width=width, height=height, generator=gen(seed), **params).images[0]
 
-    # ---------- stone albedo (two candidates) ----------
-    # One continuous surface, not a pile of pebbles: SDXL reads "river stone" as many stones unless told it is a macro of one.
-    stone_prompt = ("Extreme close-up macro photograph of the surface of a single smooth grey granite stone filling the entire "
-                    "frame, fine mineral speckle, faint warm brown veins, matte, slightly worn, no edges of the stone visible, "
-                    "no other stones, photographed flat with soft even light, no shadows, seamless tileable PBR albedo material scan." + NEG_HINT)
-    for i, seed in enumerate([11, 23]):
-        status("stone", 20 + i * 20, f"albedo {i+1}/2")
-        img = run(stone_prompt, 1024, 1024, seed)
-        img = seamless(img).resize((2048, 2048), Image.LANCZOS)
-        upload(img, "stone_albedo.jpg" if i == 0 else "stone_albedo_alt.jpg")
-        if i == 0:
-            upload(normal_from_height(img), "stone_normal.jpg", 90)
-            upload(roughness_from_albedo(img), "stone_roughness.jpg", 85)
+    # ---------- stones: four families (tan sandstone, grey-blue river stone, dark basalt, wet mossy) ----------
+    base = ("Extreme close-up macro photograph of the surface of a single {what} filling the entire frame, no edges of the stone "
+            "visible, no other stones, photographed flat with soft even light, no shadows, seamless tileable PBR albedo material scan." + NEG_HINT)
+    STONES = [("tan", "smooth warm tan sandstone with fine grain and faint ochre banding, matte", 11),
+              ("grey", "smooth grey-blue river stone with fine mineral speckle and pale quartz veins, matte", 23),
+              ("basalt", "dark charcoal basalt with tiny pores and a dull sheen, matte", 31),
+              ("moss", "wet dark stone with patches of thin green moss and damp darker areas, slightly glossy", 47)]
+    for i, (name, what, seed) in enumerate(STONES):
+        status("stone", 18 + i * 8, f"{name} {i+1}/4")
+        img = seamless(run(base.format(what=what), 1024, 1024, seed)).resize((2048, 2048), Image.LANCZOS)
+        upload(img, f"stone_{name}.jpg")
+        upload(normal_from_height(img, strength=2.6 if name == "basalt" else 2.2), f"stone_{name}_normal.jpg", 88)
+    upload(roughness_from_albedo(Image.open(io.BytesIO(S3.get_object(Bucket=BUCKET, Key=f"{PREFIX}/stone_grey.jpg")["Body"].read()))), "stone_roughness.jpg", 85)
 
-    # ---------- sky (equirectangular) ----------
-    status("sky", 65, "panorama")
-    sky_prompt = ("Equirectangular 360 degree panorama of a clear night sky over a quiet mountain pass in Korea, deep blue "
-                  "to violet gradient, a low full moon near the left horizon with soft glow, thousands of stars, faint "
-                  "milky way band, thin high clouds, distant dark ridgelines all around the horizon, ground is dark "
-                  "mossy grass, no sun, photographic, HDR look." + NEG_HINT)
-    # SDXL is trained at ~1MP: render 1536x768 and upscale; FLUX handles 2048x1024 directly.
-    sky = run(sky_prompt, 2048 if is_flux else 1536, 1024 if is_flux else 768, 7)
-    if sky.width < 2048: sky = sky.resize((2048, 1024), Image.LANCZOS)
-    upload(sky_seam(sky), "skybox.jpg", 90)
+    # ---------- ground: meadow moss and grass ----------
+    status("ground", 52, "meadow")
+    g = seamless(run("Top-down photograph of a patch of short mossy meadow grass at night, lit by soft moonlight, small pebbles and clover, "
+                     "dark green with cool blue shadows, flat, even, seamless tileable PBR albedo material scan." + NEG_HINT, 1024, 1024, 5)).resize((2048, 2048), Image.LANCZOS)
+    upload(g, "ground_albedo.jpg"); upload(normal_from_height(g, strength=1.6, blur=1.6), "ground_normal.jpg", 85)
+
+    # ---------- skies: one equirectangular panorama per altitude band (the moon and sun are drawn by the page, so none here) ----------
+    SKIES = [
+      ("meadow night over a quiet mountain valley, deep indigo to violet gradient, thousands of stars, faint milky way, thin high clouds, dark ridgelines all around the horizon, no moon, no sun", 7),
+      ("night sky seen from a hilltop above the treeline, the dark forest canopy and distant valley lights far below, deep blue with a violet horizon, dense stars, a few low clouds drifting past, no moon, no sun", 8),
+      ("sky seen from above a sea of clouds at the first light of dawn, endless soft cloud tops below, the upper sky still deep blue with stars fading, a warm peach and rose glow along one side of the horizon, no sun disc, no moon", 9),
+      ("the edge of the sky at very high altitude, the atmosphere a thin glassy band of teal and deep blue, sharp bright stars, a faint green aurora curtain, a thin cloud layer far below, no sun, no moon", 10),
+      ("looking up from just beneath a vast ceiling of water that spans the whole sky, deep teal blue, caustic light patterns rippling across it, soft rays coming down, no sun, no moon", 12),
+      ("fully underwater in a vast calm deep sea, looking in every direction, teal to deep blue gradient, god rays from above, drifting motes, no sun, no moon, no fish", 13),
+    ]
+    for i, (what, seed) in enumerate(SKIES):
+        status("sky", 56 + i * 7, f"band {i}")
+        sky = run("Equirectangular 360 degree panorama, " + what + ", photographic, HDR look." + NEG_HINT, 2048 if is_flux else 1536, 1024 if is_flux else 768, seed)
+        if sky.width < 2048: sky = sky.resize((2048, 1024), Image.LANCZOS)
+        upload(sky_seam(sky), f"sky_{i}.jpg", 88)
 
     status("done", 100, f"{model} · {len(FILES)} files")
 except Exception:

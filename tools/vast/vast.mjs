@@ -97,6 +97,12 @@ export async function fetchRun(runId) {
   if (got.includes("stone_albedo.jpg")) m.stone.albedo = "/assets/stone_albedo.jpg";
   if (got.includes("stone_normal.jpg")) m.stone.normal = "/assets/stone_normal.jpg";
   if (got.includes("stone_roughness.jpg")) m.stone.roughness = "/assets/stone_roughness.jpg";
+  // the firmament set: stone families, meadow ground, one sky per altitude band
+  const fam = ["tan", "grey", "basalt", "moss"].filter((f) => got.includes(`stone_${f}.jpg`));
+  if (fam.length) m.stone.variants = Object.fromEntries(fam.map((f) => [f, { albedo: `/assets/stone_${f}.jpg`, normal: got.includes(`stone_${f}_normal.jpg`) ? `/assets/stone_${f}_normal.jpg` : null }]));
+  if (got.includes("ground_albedo.jpg")) m.ground = { albedo: "/assets/ground_albedo.jpg", normal: got.includes("ground_normal.jpg") ? "/assets/ground_normal.jpg" : null };
+  const skies = [0, 1, 2, 3, 4, 5].map((i) => got.includes(`sky_${i}.jpg`) ? `/assets/sky_${i}.jpg` : null);
+  if (skies.some(Boolean)) m.skies = skies;
   writeFileSync(mp, JSON.stringify(m, null, 2));
   return got;
 }

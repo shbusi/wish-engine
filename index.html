@@ -223,11 +223,14 @@ canvas.addEventListener("pointerdown", wake); canvas.addEventListener("wheel", w
 const noise = new ImprovedNoise();
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { top: { value: new THREE.Color(0x04050e) }, mid: { value: new THREE.Color(0x101436) }, bot: { value: new THREE.Color(0x2a2036) }, moonDir: { value: new THREE.Vector3(-0.22, 0.3, -0.95).normalize() }, sunDir: { value: new THREE.Vector3(0.24, -0.3, -0.95).normalize() }, sun: { value: 0 }, firm: { value: 0.2 }, time: { value: 0 } },
+  uniforms: { top: { value: new THREE.Color(0x04050e) }, mid: { value: new THREE.Color(0x101436) }, bot: { value: new THREE.Color(0x2a2036) }, moonDir: { value: new THREE.Vector3(-0.22, 0.3, -0.95).normalize() }, sunDir: { value: new THREE.Vector3(0.24, -0.3, -0.95).normalize() }, sun: { value: 0 }, firm: { value: 0.2 }, time: { value: 0 }, tex0: { value: null }, tex1: { value: null }, texMix: { value: 0 }, useTex: { value: 0 } },
   vertexShader: `varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position,1.)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-  fragmentShader: `uniform vec3 top, mid, bot, moonDir, sunDir; uniform float firm, time, sun; varying vec3 vW;
+  fragmentShader: `uniform vec3 top, mid, bot, moonDir, sunDir; uniform float firm, time, sun, texMix, useTex; uniform sampler2D tex0, tex1; varying vec3 vW;
     void main(){ vec3 d = normalize(vW); float h = d.y;
       vec3 c = mix(bot, mid, smoothstep(-0.05, 0.25, h)); c = mix(c, top, smoothstep(0.2, 0.9, h));
+      // generated panoramas (one per band, blended) sit under the procedural layers when the manifest provides them
+      if (useTex > 0.5) { vec2 uv = vec2(atan(d.z, d.x) / 6.2831853 + 0.5, asin(clamp(h, -1., 1.)) / 3.1415926 + 0.5);
+        vec3 tc = mix(texture2D(tex0, uv).rgb, texture2D(tex1, uv).rgb, texMix); c = mix(c, tc * 0.85, 0.82); }
       // the sun the ground never sees: a low disc on the far side, a warm band along its horizon, both only above the clouds
       float su = max(dot(d, sunDir), 0.); float side = max(0., dot(normalize(vec3(d.x, 0., d.z)), normalize(vec3(sunDir.x, 0., sunDir.z))));
       c += vec3(1.0, 0.86, 0.6) * (pow(su, 1400.) * 2.2 + pow(su, 40.) * 0.22 + pow(su, 6.) * 0.07) * sun;
@@ -471,6 +474,8 @@ function stepCeremony(dt) {
 }
 let altOverride = Number(new URLSearchParams(location.search).get("alt")) || null; // ?alt=120 previews the look at 120 m
 let envNow = envAt(0);
+const skyTex = [];                 // generated panoramas per band (assets/manifest.json "skies"), filled by loadAssets
+const stoneVariants = {};          // generated stone families: tan / grey / basalt / moss → { map, normalMap }
 function applyEnv(altM) {
   const e = envAt(altM); envNow = e;
   skyMat.uniforms.top.value.copy(e.top); skyMat.uniforms.mid.value.copy(e.mid); skyMat.uniforms.bot.value.copy(e.bot);
@@ -481,6 +486,7 @@ function applyEnv(altM) {
   scene.getObjectByName("stars").material.uniforms.mul.value = e.stars;
   waterCeiling.material.uniforms.op.value = e.water; waterCeiling.visible = e.water > 0.01;
   skyMat.uniforms.firm.value = e.firm; causticU.mul.value = e.caustic;
+  if (skyTex.length) { const a = skyTex[Math.min(e.band, skyTex.length - 1)], b = skyTex[Math.min(e.band + 1, skyTex.length - 1)]; if (a && b) { skyMat.uniforms.tex0.value = a; skyMat.uniforms.tex1.value = b; skyMat.uniforms.texMix.value = e.t; skyMat.uniforms.useTex.value = 1; } }
   mist.material.uniforms.op.value = e.mist; mist.visible = e.mist > 0.01;
   shafts.m.uniforms.op.value = e.shafts; shafts.grp.visible = e.shafts > 0.01; shafts.grp.position.y = towerTop;
   // the ceiling hangs high above a low tower and comes down to just overhead by the firmament band
@@ -621,6 +627,8 @@ function buildStone(data, idx) {
   else if (pal < 0.85) mat.color.setHSL(0.58 + r() * 0.06, 0.05 + r() * 0.08, 0.55 + r() * 0.14 - low * 0.12);
   else mat.color.setHSL(0.08 + r() * 0.04, 0.05, 0.3 + r() * 0.1);
   mat.roughness = 0.62 + r() * 0.3 - low * 0.12; mat.bumpScale = 0.35 + r() * 0.35;
+  const famKey = low > 0.55 && stoneVariants.moss ? "moss" : pal < 0.55 ? "tan" : pal < 0.85 ? "grey" : "basalt";
+  const fv = stoneVariants[famKey]; if (fv) { mat.map = fv.map; mat.normalMap = fv.normalMap; mat.normalScale.set(0.75, 0.75); mat.bumpMap = null; mat.color.multiplyScalar(1.25); mat.roughnessMap = stoneMat.roughnessMap; }
   const mesh = new THREE.Mesh(g, mat); mesh.castShadow = mesh.receiveShadow = true;
   mesh.rotation.y = r() * Math.PI * 2; mesh.rotation.z = (r() - .5) * 0.13; mesh.rotation.x = (r() - .5) * 0.1;
   mesh.userData.id = data.id;
@@ -1001,6 +1009,23 @@ async function loadAssets() {
       if (m.stone.normal) { const n = await tl.loadAsync(m.stone.normal); n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(rep, rep); stoneMat.normalMap = n; stoneMat.normalScale.set(0.7, 0.7); stoneMat.bumpMap = null; }
       if (m.stone.roughness) { const r = await tl.loadAsync(m.stone.roughness); r.wrapS = r.wrapT = THREE.RepeatWrapping; r.repeat.set(rep, rep); stoneMat.roughnessMap = r; }
       for (const st of stones) { st.mesh.material.map = stoneMat.map; st.mesh.material.bumpMap = stoneMat.bumpMap; st.mesh.material.normalMap = stoneMat.normalMap; st.mesh.material.roughnessMap = stoneMat.roughnessMap; st.mesh.material.needsUpdate = true; }
+    }
+    const wrap = (t, rep = 1) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8; return t; };
+    if (m.skies?.some(Boolean)) { // one panorama per altitude band; the dome shader blends neighbours
+      await Promise.all(m.skies.map(async (u, i) => { if (!u) return; const t = await tl.loadAsync(u); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; skyTex[i] = t; }));
+      for (let i = 0; i < 6; i++) skyTex[i] ??= skyTex[i - 1] ?? skyTex.find(Boolean);
+      if (!m.skybox && skyTex[0]) { const e = skyTex[0].clone(); e.mapping = THREE.EquirectangularReflectionMapping; e.needsUpdate = true; scene.environment = pmrem.fromEquirectangular(e).texture; }
+      applyEnv(altShown);
+    }
+    if (m.stone?.variants) {
+      const rep = m.stone.repeat ?? 0.55;
+      await Promise.all(Object.entries(m.stone.variants).map(async ([k, v]) => { const map = wrap(await tl.loadAsync(v.albedo), rep); map.colorSpace = THREE.SRGBColorSpace; const normalMap = v.normal ? wrap(await tl.loadAsync(v.normal), rep) : null; stoneVariants[k] = { map, normalMap }; }));
+      await load(); // rebuild the visible stones with their family textures
+    }
+    if (m.ground?.albedo) {
+      const g = scene.getObjectByName("ground"); const a = wrap(await tl.loadAsync(m.ground.albedo), 26); a.colorSpace = THREE.SRGBColorSpace; g.material.map = a;
+      if (m.ground.normal) { g.material.normalMap = wrap(await tl.loadAsync(m.ground.normal), 26); g.material.normalScale.set(0.5, 0.5); }
+      g.material.needsUpdate = true;
     }
     if (m.stone?.model) {
       const gltf = await new GLTFLoader().loadAsync(m.stone.model); let geo = null;
