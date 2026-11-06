@@ -68,6 +68,9 @@ try { db.exec("ALTER TABLE wallets ADD COLUMN bless_day INTEGER NOT NULL DEFAULT
 try { db.exec("ALTER TABLE wallets ADD COLUMN bless_n INTEGER NOT NULL DEFAULT 0"); } catch {}     // free blessings given on bless_day
 try { db.exec("ALTER TABLE wallets ADD COLUMN seen_bless INTEGER NOT NULL DEFAULT 0"); } catch {}  // last time the owner was told about new blessings (ms)
 db.exec(`CREATE TABLE IF NOT EXISTS blessings (stone_id INTEGER NOT NULL, wallet_id INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (stone_id, wallet_id))`);
+// Visits: one row per page load (client-generated id), with source and time on page. Feeds /api/analytics.
+db.exec(`CREATE TABLE IF NOT EXISTS visits (id TEXT PRIMARY KEY, wallet_id INTEGER, day INTEGER NOT NULL, source TEXT, path TEXT, lang TEXT, seconds INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`);
+db.exec("CREATE INDEX IF NOT EXISTS visits_day ON visits(day)");
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
@@ -92,6 +95,20 @@ const q = {
   mTotals: db.prepare("SELECT COUNT(*) AS stones, COUNT(DISTINCT wallet_id) AS wallets, SUM(paid) AS paid, SUM(sealed) AS sealed, SUM(CASE WHEN chain_id IS NOT NULL THEN 1 ELSE 0 END) AS onchain, SUM(blessings) AS blessings FROM stones WHERE bot = 0"),
   mReturning: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE placed >= 2"),
   mBuyers: db.prepare("SELECT COUNT(DISTINCT wallet_id) AS n, COALESCE(SUM(CAST(usd AS REAL)), 0) AS usd FROM orders WHERE status = 'PAID'"),
+  // analytics
+  visitPut: db.prepare("INSERT OR IGNORE INTO visits (id, wallet_id, day, source, path, lang, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+  visitEnd: db.prepare("UPDATE visits SET seconds = MAX(seconds, ?) WHERE id = ? AND wallet_id = ?"),
+  aVisits: db.prepare("SELECT day AS d, COUNT(*) AS visits, COUNT(DISTINCT wallet_id) AS uniques, AVG(seconds) AS secs FROM visits WHERE day >= ? GROUP BY day"),
+  aNewWallets: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n FROM wallets WHERE created_at >= ? GROUP BY d"),
+  aOrders: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS created, SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) AS paid, COALESCE(SUM(CASE WHEN status = 'PAID' THEN CAST(usd AS REAL) ELSE 0 END), 0) AS usd FROM orders WHERE created_at >= ? GROUP BY d"),
+  aBless: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n FROM blessings WHERE created_at >= ? GROUP BY d"),
+  aChain: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n FROM stones WHERE chain_id IS NOT NULL AND created_at >= ? GROUP BY d"),
+  aSources: db.prepare("SELECT COALESCE(source, 'direct') AS source, COUNT(*) AS visits, COUNT(DISTINCT wallet_id) AS uniques FROM visits WHERE day >= ? GROUP BY source ORDER BY visits DESC LIMIT 20"),
+  aCohort: db.prepare(`SELECT w.id, (w.created_at / 86400000) AS d0,
+      EXISTS (SELECT 1 FROM visits v WHERE v.wallet_id = w.id AND v.day = (w.created_at / 86400000) + 1) OR EXISTS (SELECT 1 FROM stones s WHERE s.wallet_id = w.id AND (s.created_at / 86400000) = (w.created_at / 86400000) + 1) AS d1,
+      EXISTS (SELECT 1 FROM visits v WHERE v.wallet_id = w.id AND v.day > (w.created_at / 86400000) AND v.day <= (w.created_at / 86400000) + 7) OR EXISTS (SELECT 1 FROM stones s WHERE s.wallet_id = w.id AND (s.created_at / 86400000) > (w.created_at / 86400000) AND (s.created_at / 86400000) <= (w.created_at / 86400000) + 7) AS d7,
+      w.placed > 0 AS activated, EXISTS (SELECT 1 FROM orders o WHERE o.wallet_id = w.id AND o.status = 'PAID') AS paid
+    FROM wallets w WHERE w.created_at >= ? AND w.created_at < ?`),
   recent: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
   after: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
@@ -329,6 +346,45 @@ export function metrics(now = Date.now()) {
   metricsCache = { at: now, v };
   return v;
 }
+/** Record a page view (sendBeacon from the page). Same id twice = the end-of-visit beacon with seconds on page. */
+export function recordVisit(wallet, { id, ref, q: query, path, lang, seconds }, now = Date.now()) {
+  const vid = String(id ?? "").slice(0, 40); if (!/^[A-Za-z0-9_-]{8,40}$/.test(vid)) return false;
+  let source = null;
+  try { const u = new URLSearchParams(String(query ?? "")); source = (u.get("utm_source") || u.get("ref") || "").slice(0, 60) || null; } catch {}
+  if (!source && ref) { try { const h = new URL(String(ref)).hostname; source = h && h !== new URL(APP_URL()).hostname && !/^(localhost|127\.)/.test(h) ? h.replace(/^www\./, "").slice(0, 60) : null; } catch {} }
+  const secs = Math.min(3600, Math.max(0, Math.round(Number(seconds) || 0)));
+  q.visitPut.run(vid, wallet.id, Math.floor(now / 86_400_000), source, String(path ?? "/").slice(0, 40), String(lang ?? "").slice(0, 8), secs, now);
+  if (secs) q.visitEnd.run(secs, vid, wallet.id);
+  return true;
+}
+
+let analyticsCache = new Map();
+/** Daily series + KPIs + growth + retention + funnel. `admin` adds traffic sources. Cached a minute per (days, admin). */
+export function analytics(days = 30, admin = false, now = Date.now()) {
+  const key = `${days}:${admin}`, c = analyticsCache.get(key); if (c && now - c.at < 60_000) return c.v;
+  days = Math.min(365, Math.max(7, Number(days) || 30));
+  const today = Math.floor(now / 86_400_000), from = today - days + 1, fromMs = from * 86_400_000;
+  const byDay = (rows) => new Map(rows.map((r) => [r.d, r]));
+  const V = byDay(q.aVisits.all(from)), N = byDay(q.aNewWallets.all(fromMs)), O = byDay(q.aOrders.all(fromMs)), B = byDay(q.aBless.all(fromMs)), C = byDay(q.aChain.all(fromMs)), S = byDay(q.mDays.all(fromMs));
+  const series = Array.from({ length: days }, (_, i) => { const d = from + i; return { day: new Date(d * 86_400_000).toISOString().slice(0, 10),
+    visits: V.get(d)?.visits ?? 0, uniques: V.get(d)?.uniques ?? 0, secs: Math.round(V.get(d)?.secs ?? 0), newWallets: N.get(d)?.n ?? 0,
+    stones: S.get(d)?.n ?? 0, wishers: S.get(d)?.w ?? 0, paidStones: S.get(d)?.p ?? 0, ordersCreated: O.get(d)?.created ?? 0, ordersPaid: O.get(d)?.paid ?? 0, revenue: Math.round((O.get(d)?.usd ?? 0) * 100) / 100,
+    blessings: B.get(d)?.n ?? 0, onchain: C.get(d)?.n ?? 0 }; });
+  const sum = (k, rows) => rows.reduce((a, r) => a + r[k], 0);
+  const last7 = series.slice(-7), prev7 = series.slice(-14, -7);
+  const growth = {}; for (const k of ["visits", "uniques", "stones", "wishers", "revenue", "newWallets", "blessings"]) { const a = sum(k, last7), b = sum(k, prev7); growth[k] = { last7: Math.round(a * 100) / 100, prev7: Math.round(b * 100) / 100, pct: b ? Math.round((a - b) / b * 1000) / 10 : null }; }
+  // retention: cohorts that are at least 8 days old (so D7 is observable), within the window
+  const coh = q.aCohort.all(fromMs, (today - 7) * 86_400_000);
+  const rate = (k) => coh.length ? Math.round(coh.filter((r) => r[k]).length / coh.length * 1000) / 10 : null;
+  const retention = { cohort: coh.length, d1: rate("d1"), d7: rate("d7") };
+  // funnel over the whole window: wallets created → placed a stone → paid
+  const all = q.aCohort.all(fromMs, now + 1);
+  const funnel = { wallets: all.length, activated: all.filter((r) => r.activated).length, paid: all.filter((r) => r.paid).length };
+  const totalSecs = series.reduce((a, r) => a + r.secs * r.visits, 0), totalVisits = sum("visits", series);
+  const v = { days, series, growth, retention, funnel, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
+  analyticsCache.set(key, { at: now, v });
+  return v;
+}
 const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM });
 
 export const server = http.createServer(async (req, res) => {
@@ -348,6 +404,26 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/investors") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(page("investors.html"));
+    }
+    if (req.method === "GET" && url.pathname === "/analytics") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+      return res.end(page("analytics.html"));
+    }
+    if (req.method === "POST" && url.pathname === "/api/visit") {
+      const [w, setCookie] = wallet(req);
+      let body = {}; try { body = await readBody(req); } catch {}
+      recordVisit(w, body);
+      return json(res, 200, { ok: true }, setCookie ? { "Set-Cookie": setCookie } : {});
+    }
+    if (req.method === "GET" && url.pathname === "/api/analytics") {
+      const admin = !!process.env.ADMIN_TOKEN && (req.headers["x-admin-token"] === process.env.ADMIN_TOKEN || url.searchParams.get("token") === process.env.ADMIN_TOKEN);
+      return json(res, 200, { ...analytics(url.searchParams.get("days"), admin), admin, chain: chainPublic() }, { "Cache-Control": "no-store" });
+    }
+    if (req.method === "GET" && url.pathname === "/api/analytics.csv") {
+      if (!process.env.ADMIN_TOKEN || (req.headers["x-admin-token"] !== process.env.ADMIN_TOKEN && url.searchParams.get("token") !== process.env.ADMIN_TOKEN)) return json(res, 401, { error: "unauthorized" });
+      const a = analytics(url.searchParams.get("days") ?? 90, true), cols = Object.keys(a.series[0]);
+      res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=wish-cairn-analytics.csv" });
+      return res.end([cols.join(","), ...a.series.map((r) => cols.map((c) => r[c]).join(","))].join("\n"));
     }
     if (req.method === "GET" && url.pathname === "/api/metrics") return json(res, 200, { ...metrics(), chain: chainPublic() }, { "Cache-Control": "public, max-age=60" });
     if (url.pathname === "/wallet.js") {

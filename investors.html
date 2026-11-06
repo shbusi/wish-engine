@@ -161,6 +161,11 @@ const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(.
 document.documentElement.lang = L;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 const $ = (id) => document.getElementById(id);
+// ---- visit beacon: source + time on page for /analytics (no third-party script, no fingerprinting)
+{ const vid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); const t0 = Date.now();
+  const send = (seconds) => { try { navigator.sendBeacon("/api/visit", JSON.stringify({ id: vid, ref: document.referrer, q: location.search, path: location.pathname, lang: navigator.language, seconds })); } catch {} };
+  send(0); addEventListener("pagehide", () => send((Date.now() - t0) / 1000)); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") send((Date.now() - t0) / 1000); }); }
+
 if (L === "ko") { $("langSwap").textContent = "English"; $("langSwap").href = "?"; $("dapp").href = "/invest?lang=ko"; }
 const fmt = (v, d = 0) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
 const dur = (s) => { s = Math.max(0, s); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };

@@ -26,6 +26,10 @@
   .tag { position:fixed; transform:translate(-50%,-100%); pointer-events:none; background:rgba(14,13,24,.78); backdrop-filter: blur(8px); border:1px solid var(--line); color:var(--fg); border-radius:999px; padding:4px 10px; font-size:13px; font-weight:600; white-space:nowrap; opacity:0; transition:opacity .3s; }
   .tag.show { opacity:1; }
   .tag.mine { border-color: var(--accent); color: var(--accent); }
+  body.video .sheet, body.video #feedBtn, body.video #investLink, body.video #tip, body.video #feed, body.video .toast { display:none !important; }
+  body.video .hud .brand { transform: scale(1.15); transform-origin: top left; }
+  #vcap { position:fixed; left:0; right:0; bottom:9%; text-align:center; font-size:30px; font-weight:800; letter-spacing:.01em; color:var(--fg); text-shadow:0 2px 18px rgba(0,0,0,.7); opacity:0; transition:opacity .4s; pointer-events:none; }
+  #vcap small { display:block; font-size:16px; font-weight:500; color:var(--muted); margin-top:4px; }
   .float { position:fixed; transform:translate(-50%,-50%); pointer-events:none; color:var(--accent); font-weight:800; font-size:22px; text-shadow:0 2px 12px rgba(0,0,0,.6); animation: rise 1.6s ease-out forwards; }
   @keyframes rise { 0% { opacity:0; transform:translate(-50%,-30%) scale(.8);} 15% { opacity:1; transform:translate(-50%,-50%) scale(1.1);} 100% { opacity:0; transform:translate(-50%,-160%) scale(1);} }
   .meta { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-top:8px; }
@@ -145,12 +149,21 @@ const T = {
   en: { invest:"Invest", onchain:"Stack on-chain (stablecoin, you keep the stone as an NFT)", connect:"Connect wallet", connected:(a)=>`Connected ${a}`, chainBusy:"Confirm in your wallet…", noWallet:"No wallet found.", getWallet:"Get a wallet", openIn:"Open in a wallet app:", pickWallet:"Choose a wallet", cancel:"Cancel", rejected:"Connection was rejected in the wallet", viewTx:"View on explorer", disconnect:"Disconnect", seal:"Seal it · 1 stone", sealHelp:"A sealed wish can only be read by you. Others see a wax seal.", needStonesSeal:"Sealing costs one stone. Get a stone pack first.", sealed:"Sealed wish", bless:"Bless", blessFree:(n)=>`✦ Bless · ${n} free today`, blessPaid:"✦ Bless · 1 stone", blessed:"Blessed ✦", blessedYou:(n)=>`✦ ${n} ${n === 1 ? "person" : "people"} blessed your wish`, ownStone:"That's your own stone", needStonesBless:"No free blessings left today. Get a stone pack to keep blessing.", blessSpent:"Blessed with 1 stone", chainDone:(id)=>`On-chain stone #${id} is on the tower`, chainFail:"On-chain stacking failed", wrongChain:"Please switch your wallet's network", bands:["Meadow","Above the trees","Above the clouds","Edge of the sky","The Firmament"], bandNext:(n,name)=>`${n} stones to ${name}`, bandTop:"You've reached the firmament. The waters above are stirring.", freeReady:"Today's free stone is ready", nextFree:(h)=>`Next free stone in ${h}`, creditsLeft:(n)=>`${n} stone${n === 1 ? "" : "s"} left`, buy:(n,p)=>`${n} stones · $${p}`, needStones:"You've used today's free stone. Get a stone pack to keep stacking.", bought:(n)=>`${n} stones added`, failed:"Payment didn't go through", you:(n,cm)=>`You've placed ${n} stone${n === 1 ? "" : "s"} · lifted the tower ${fmtCm(cm)}`, toGo:(n,m)=>`${n} stones to ${m} m`, reached:(m)=>`🎉 The tower passed ${m} m`, todayN:(n)=>`+${n} today`, title:"Wish Cairn", loading:"Loading the cairn…", stones:"stones", watching:"here now", recent:"Recent wishes", wishPh:"What do you hope for?", namePh:"Name (optional) · engraved on your stone", stack:"Stack a stone", stacking:"Stacking…", done:"Your stone is on the tower now.", short:"Your wish is too short.", rate:"Please wait a moment.", err:"Something went wrong. Try again.", anon:"anonymous", mine:"Find my stone", share:"Share link", copied:"Link copied", landed:(n)=>`${n} just stacked a stone`, landedAnon:"Someone just stacked a stone", hidden:(n)=>`${n.toLocaleString()} more stones below` },
 };
 const L = new URLSearchParams(location.search).get("lang") === "ko" ? "ko" : "en"; // English by default; ?lang=ko for Korean
+// ?video=1: frame-stepped capture mode for tools/make-video.mjs. The page stops animating on its own and exposes window.__video.
+const VIDEO = new URLSearchParams(location.search).has("video");
+let vnow = 0, vdt = 1 / 24; const vclock = () => (VIDEO ? vnow : performance.now());
+if (VIDEO) document.body.classList.add("video");
 const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
 document.documentElement.lang = L;
-$("sealLabel").title = t("sealHelp");
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
 const $ = (id) => document.getElementById(id);
+$("sealLabel").title = t("sealHelp");
+// ---- visit beacon: source + time on page for /analytics (no third-party script, no fingerprinting)
+{ const vid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); const t0 = Date.now();
+  const send = (seconds) => { try { navigator.sendBeacon("/api/visit", JSON.stringify({ id: vid, ref: document.referrer, q: location.search, path: location.pathname, lang: navigator.language, seconds })); } catch {} };
+  send(0); addEventListener("pagehide", () => send((Date.now() - t0) / 1000)); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") send((Date.now() - t0) / 1000); }); }
+
 const fmtCm = (cm) => (cm >= 100 ? `${(cm / 100).toFixed(2)} m` : `${cm} cm`);
 const fmtDur = (ms) => { const mins = Math.max(1, Math.ceil(ms / 6e4)), h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -553,7 +566,7 @@ const camTarget = new THREE.Vector3(0, 2, 0);
 let focusStone = null, focusT = 0, altShown = 0;
 const tmpV = new THREE.Vector3();
 function tick() {
-  const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  const dt = VIDEO ? vdt : Math.min(clock.getDelta(), 0.05), time = VIDEO ? vnow / 1000 : clock.elapsedTime;
   // physics for falling stones
   for (const st of stones) {
     if (st.falling) {
@@ -578,12 +591,12 @@ function tick() {
   const wantY = focusStone ? focusStone.mesh.position.y : Math.max(0.3, towerTop - 1.9);
   camTarget.lerp(new THREE.Vector3(0, wantY, 0), 1 - Math.pow(0.001, dt));
   controls.target.copy(camTarget);
-  if (focusT > 0 || !focusStone) { if (focusT > 0) focusT -= dt; const want = focusStone ? Math.max(4.5, focusStone.rx * 6) : Math.min(12, 6 + towerTop * 0.45); const d = camera.position.distanceTo(controls.target); if (Math.abs(d - want) > 0.05) { camera.position.sub(controls.target).multiplyScalar(1 + (want - d) / d * (1 - Math.pow(0.02, dt))).add(controls.target); } }
-  controls.update();
+  if (focusT > 0 || !focusStone) { if (focusT > 0) focusT -= dt; const want = (focusStone ? Math.max(4.5, focusStone.rx * 6) : Math.min(12, 6 + towerTop * 0.45)) * (VIDEO ? 1.3 : 1); const d = camera.position.distanceTo(controls.target); if (Math.abs(d - want) > 0.05) { camera.position.sub(controls.target).multiplyScalar(1 + (want - d) / d * (1 - Math.pow(0.02, dt))).add(controls.target); } }
+  controls.update(VIDEO ? dt : null);
   composer.render();
   if (tipFor) placeTip();
-  placeTags();
-  requestAnimationFrame(tick);
+  placeTags(); if (VIDEO) stepFloats();
+  if (!VIDEO) requestAnimationFrame(tick);
 }
 
 // ================================================================== name tags: only for the stone that just landed and for my stone
@@ -592,11 +605,11 @@ function tagStone(st, ms, mineTag = false) {
   if (!st?.data.name) return;
   let tg = tags.get(st.data.id);
   if (!tg) { const el = document.createElement("div"); el.className = "tag"; document.body.appendChild(el); tg = { el, st }; tags.set(st.data.id, tg); }
-  tg.el.textContent = st.data.name; tg.el.classList.toggle("mine", mineTag); tg.until = performance.now() + ms;
+  tg.el.textContent = st.data.name; tg.el.classList.toggle("mine", mineTag); tg.until = vclock() + ms;
   requestAnimationFrame(() => tg.el.classList.add("show"));
 }
 function placeTags() {
-  const now = performance.now();
+  const now = vclock();
   for (const [id, tg] of tags) {
     if (!byId.has(id) || now > tg.until) { tg.el.classList.remove("show"); if (now > tg.until + 400) { tg.el.remove(); tags.delete(id); } continue; }
     tmpV.copy(tg.st.mesh.position).y += tg.st.ry + 0.15; tmpV.project(camera);
@@ -608,7 +621,14 @@ function floatText(st, text) {
   const el = document.createElement("div"); el.className = "float"; el.textContent = text; document.body.appendChild(el);
   tmpV.copy(st.mesh.position).y += st.ry; tmpV.project(camera);
   el.style.left = `${(tmpV.x + 1) / 2 * innerWidth + 60}px`; el.style.top = `${(1 - tmpV.y) / 2 * innerHeight}px`;
+  if (VIDEO) { el.style.animation = "none"; floats.push({ el, t0: vnow }); return; }
   setTimeout(() => el.remove(), 1700);
+}
+const floats = []; // video mode: the CSS "rise" animation can't be frame-stepped, so drive it from the virtual clock
+function stepFloats() {
+  for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i], p = (vnow - f.t0) / 1600;
+    if (p >= 1) { f.el.remove(); floats.splice(i, 1); continue; }
+    f.el.style.opacity = p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85; f.el.style.transform = `translate(-50%, ${-30 - 130 * p}%) scale(${p < 0.15 ? 0.8 + 2 * p : 1.1 - 0.1 * (p - 0.15) / 0.85})`; }
 }
 
 // ================================================================== interaction: tap a stone to read its wish
@@ -832,13 +852,25 @@ async function loadAssets() {
 
 // ================================================================== go
 await Promise.all([load(), loadMe()]);
-live();
+if (!VIDEO) live();
 $("loading").classList.add("gone");
 { const qs = new URLSearchParams(location.search);
   if (qs.get("bought")) { toast(t("bought", pack?.stones ?? "")); history.replaceState(null, "", "/"); }
   if (qs.get("failed")) { toast(t("failed")); history.replaceState(null, "", "/"); } }
-tick();
-loadAssets();
+if (VIDEO) {
+  controls.autoRotate = true; controls.autoRotateSpeed = 1.2;
+  const cap = document.createElement("div"); cap.id = "vcap"; document.body.appendChild(cap);
+  window.__video = {
+    ready: false,
+    step(dt) { vdt = dt; vnow += dt * 1000; tick(); },
+    /** Drop a stone locally (nothing is sent to the server). */
+    drop(name, wish = "") { const d = { id: lastId + 1, name: String(name ?? "").slice(0, 20), wish: String(wish), sealed: 0, blessings: 0, created_at: Date.now() }; today++; const st = addStone(d, true); if (st) { st.vy = -2; } return d.id; },
+    caption(title, sub = "") { cap.innerHTML = `${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ""}`; cap.style.opacity = title ? "1" : "0"; },
+    stats: () => ({ total, meters: (total * stoneCm) / 100 }),
+  };
+  loadAssets().catch(() => {}).finally(() => { window.__video.ready = true; });
+  tick();
+} else { tick(); loadAssets(); }
 { // deep link ?s=<id>: find that stone
   const s = Number(new URLSearchParams(location.search).get("s"));
   if (s) { const st = byId.get(s); if (st) setTimeout(() => focusOn(st), 600); else fetch(`/api/stones?id=${s}`).then((r) => r.ok ? r.json() : null).then((j) => j && toast(`“${j.stone.wish}” — ${t("hidden", total - stones.length)}`)); }

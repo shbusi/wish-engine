@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wish Cairn · Analytics</title>
+<meta name="description" content="Acquisition, engagement, payments, on-chain investment and growth for Wish Cairn.">
+<style>
+  :root { --bg:#0b0b16; --surface:#14131e; --fg:#f0efec; --muted:#c3c2b7; --dim:#8c8a80; --line: rgba(255,255,255,.1); --accent:#f0b35b;
+          --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --good:#0ca30c; --bad:#e66767; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background: radial-gradient(ellipse at 50% 0%, #1a1a33 0%, var(--bg) 60%); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans KR", sans-serif; line-height:1.45; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:20px; margin:0; } h2 { font-size:15px; margin:0 0 8px; color:var(--muted); font-weight:600; }
+  a { color: var(--accent); text-decoration:none; }
+  .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:16px 0; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; } .seg button { background:none; border:0; color:var(--muted); padding:6px 12px; font:inherit; cursor:pointer; } .seg button.on { background:rgba(255,255,255,.1); color:var(--fg); }
+  .btn { background:transparent; color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
+  .grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 10px 0 18px; }
+  .tile { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+  .tile .k { color:var(--muted); font-size:12px; } .tile .v { font-size:24px; font-weight:800; margin-top:2px; font-variant-numeric: tabular-nums; } .tile .d { font-size:12px; margin-top:2px; color:var(--dim); }
+  .up { color:var(--good); } .down { color:var(--bad); }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin: 10px 0; }
+  .two { display:grid; gap:10px; grid-template-columns: 1fr; } @media (min-width: 760px) { .two { grid-template-columns: 1fr 1fr; } }
+  svg { width:100%; height:auto; display:block; overflow:visible; } .grid-line { stroke: rgba(255,255,255,.08); } .axis text { fill: var(--dim); font-size:11px; }
+  .legend { display:flex; gap:14px; font-size:12px; color:var(--muted); margin-bottom:6px; } .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .tip { position:fixed; pointer-events:none; background:#1f1e2b; border:1px solid var(--line); border-radius:10px; padding:6px 10px; font-size:12px; color:var(--fg); display:none; z-index:5; white-space:nowrap; }
+  table { width:100%; border-collapse: collapse; font-size:13px; } td, th { padding:6px 6px; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; font-size:12px; } td.n, th.n { text-align:right; font-variant-numeric: tabular-nums; }
+  .funnel { display:flex; gap:8px; align-items:flex-end; } .funnel div { flex:1; } .funnel .bar { background:var(--s1); border-radius:4px 4px 0 0; min-height:3px; } .funnel .lbl { font-size:12px; color:var(--muted); margin-top:4px; } .funnel .val { font-weight:700; }
+  .muted { color:var(--muted); font-size:12px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🪨 Wish Cairn <span class="muted" style="margin-left:6px" data-i18n="sub">Analytics</span></h1>
+    <div style="display:flex;gap:10px;align-items:center"><a href="/" data-i18n="tower">← Tower</a><a href="/investors" data-i18n="overview">Investor overview</a><a id="langSwap" href="?lang=ko">한국어</a></div>
+  </header>
+  <div class="filters">
+    <div class="seg" id="range"><button data-d="7">7d</button><button data-d="30" class="on">30d</button><button data-d="90">90d</button></div>
+    <button class="btn" id="tableToggle" data-i18n="tableView">Table view</button>
+    <span id="adminBox"></span>
+    <span class="muted" id="updated"></span>
+  </div>
+
+  <h2 data-i18n="kpiTitle">Last 7 days vs the 7 before</h2>
+  <div class="grid" id="kpis"></div>
+
+  <div class="two">
+    <div class="card"><h2 data-i18n="trafficTitle">Traffic · visits and unique wishers per day</h2><div id="traffic"></div></div>
+    <div class="card"><h2 data-i18n="stonesTitle">Stones placed by visitors per day</h2><div id="stones"></div></div>
+    <div class="card"><h2 data-i18n="revenueTitle">Pack revenue per day (USD)</h2><div id="revenue"></div></div>
+    <div class="card"><h2 data-i18n="engTitle">Engagement · blessings and on-chain stones per day</h2><div id="engage"></div></div>
+  </div>
+
+  <div class="two">
+    <div class="card"><h2 data-i18n="funnelTitle">Funnel in this period · new wallets → placed a stone → paid</h2><div class="funnel" id="funnel"></div></div>
+    <div class="card"><h2 data-i18n="retTitle">Retention · new wishers who came back</h2><div class="grid" id="retention" style="margin:0"></div><p class="muted" id="retNote"></p></div>
+  </div>
+
+  <div class="card" id="chainCard"><h2 data-i18n="chainTitle">Investment · on-chain</h2><div class="grid" id="chain" style="margin:0"></div></div>
+  <div class="card hidden" id="sourcesCard"><h2 data-i18n="sourcesTitle">Traffic sources (operator only)</h2><table id="sources"></table></div>
+  <div class="card hidden" id="tableCard"><h2 data-i18n="tableTitle">Daily table</h2><div style="overflow:auto"><table id="daily"></table></div></div>
+
+  <p class="muted" data-i18n="note">Visitor metrics exclude seeded content. Visits are counted by a first-party beacon with no third-party script. Numbers refresh every minute.</p>
+</main>
+<div class="tip" id="tip"></div>
+
+<script type="module">
+const T = {
+  en: { sub:"Analytics", tower:"← Tower", overview:"Investor overview", tableView:"Table view", kpiTitle:"Last 7 days vs the 7 before", trafficTitle:"Traffic · visits and unique wishers per day", stonesTitle:"Stones placed by visitors per day", revenueTitle:"Pack revenue per day (USD)", engTitle:"Engagement · blessings and on-chain stones per day", funnelTitle:"Funnel in this period · new wallets → placed a stone → paid", retTitle:"Retention · new wishers who came back", chainTitle:"Investment · on-chain", sourcesTitle:"Traffic sources (operator only)", tableTitle:"Daily table", note:"Visitor metrics exclude seeded content. Visits are counted by a first-party beacon with no third-party script. Numbers refresh every minute.",
+    kpi:{ visits:"Visits", uniques:"Unique wishers visiting", newWallets:"New wishers", stones:"Stones", revenue:"Revenue (USD)", blessings:"Blessings", time:"Avg time on page", activation:"Visit → stone", paidConv:"Wisher → buyer" }, prev:(v)=>`prev ${v}`, legend:{ visits:"Visits", uniques:"Unique wishers", stones:"Stones", paidStones:"of which paid", revenue:"Revenue", blessings:"Blessings", onchain:"On-chain stones" },
+    funnel:["New wallets","Placed a stone","Bought a pack"], ret:{ d1:"Came back next day", d7:"Came back within 7 days", cohort:"Cohort size" }, retNote:(n)=>`Cohort: wishers whose first visit was in this period and at least 8 days ago (${n}).`,
+    chain:{ raised:"Sale raised", staked:"CAIRN staked", stakers:"Distributed to stakers", onchain:"On-chain stones", none:"On-chain layer not configured" },
+    adminOn:"Operator view · ", adminOff:"Operator? ", adminBtn:"enter token", csv:"Download CSV", updated:(d)=>`updated ${d}`, src:{ source:"Source", visits:"Visits", uniques:"Unique", share:"Share" }, direct:"direct / unknown" },
+  ko: { sub:"분석", tower:"← 탑으로", overview:"투자자 소개", tableView:"표로 보기", kpiTitle:"최근 7일 vs 그 전 7일", trafficTitle:"유입 · 일별 방문과 고유 방문자", stonesTitle:"방문자가 올린 돌 (일별)", revenueTitle:"팩 매출 (일별, USD)", engTitle:"참여 · 축복과 온체인 돌 (일별)", funnelTitle:"이 기간 퍼널 · 신규 지갑 → 돌 올림 → 결제", retTitle:"리텐션 · 신규 방문자 재방문", chainTitle:"투자 · 온체인", sourcesTitle:"유입 경로 (운영자 전용)", tableTitle:"일별 표", note:"방문자 지표에서 시드 콘텐츠는 제외됩니다. 방문은 외부 스크립트 없이 자체 비콘으로 셉니다. 1분마다 갱신.",
+    kpi:{ visits:"방문", uniques:"고유 방문자", newWallets:"신규 방문자", stones:"돌", revenue:"매출 (USD)", blessings:"축복", time:"평균 체류", activation:"방문 → 돌", paidConv:"방문자 → 구매" }, prev:(v)=>`이전 ${v}`, legend:{ visits:"방문", uniques:"고유 방문자", stones:"돌", paidStones:"그중 유료", revenue:"매출", blessings:"축복", onchain:"온체인 돌" },
+    funnel:["신규 지갑","돌 올림","팩 구매"], ret:{ d1:"다음 날 재방문", d7:"7일 내 재방문", cohort:"코호트 크기" }, retNote:(n)=>`코호트: 이 기간에 처음 왔고 8일 이상 지난 방문자 (${n}명).`,
+    chain:{ raised:"세일 모금", staked:"스테이킹된 CAIRN", stakers:"스테이커 분배 누적", onchain:"온체인 돌", none:"온체인 레이어 미설정" },
+    adminOn:"운영자 보기 · ", adminOff:"운영자? ", adminBtn:"토큰 입력", csv:"CSV 다운로드", updated:(d)=>`갱신 ${d}`, src:{ source:"경로", visits:"방문", uniques:"고유", share:"비중" }, direct:"직접 / 알 수 없음" },
+};
+const qs = new URLSearchParams(location.search), L = qs.get("lang") === "ko" ? "ko" : "en";
+const t = (k, ...a) => { const v = T[L][k]; return typeof v === "function" ? v(...a) : v; };
+document.documentElement.lang = L; document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+const $ = (id) => document.getElementById(id);
+if (L === "ko") { $("langSwap").textContent = "English"; $("langSwap").href = "?"; }
+const fmt = (v, d = 0) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let token = qs.get("token") || sessionStorage.getItem("cairn_admin") || ""; if (qs.get("token")) { sessionStorage.setItem("cairn_admin", token); history.replaceState(null, "", location.pathname + (L === "ko" ? "?lang=ko" : "")); }
+let days = 30, tableOn = false, data = null;
+
+// ---- tiny chart kit: one y-axis, thin marks, hover tooltip, legend for >= 2 series
+const tip = $("tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block"; tip.style.left = `${Math.min(innerWidth - 200, e.clientX + 12)}px`; tip.style.top = `${e.clientY + 12}px`; }
+function hideTip() { tip.style.display = "none"; }
+function chart(el, rows, series, { money = false } = {}) {
+  const W = 480, H = 170, P = { l: 34, r: 8, t: 8, b: 22 }, w = W - P.l - P.r, h = H - P.t - P.b;
+  const max = Math.max(1, ...rows.flatMap((r) => series.map((s) => r[s.k])));
+  const nice = Math.pow(10, Math.floor(Math.log10(max))), top = Math.ceil(max / nice) * nice;
+  const x = (i) => P.l + (i + 0.5) * (w / rows.length), y = (v) => P.t + h - (v / top) * h;
+  const ticks = [0, 0.5, 1].map((f) => top * f);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  svg += ticks.map((v) => `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${P.l - 4}" y="${y(v) + 4}" text-anchor="end" style="fill:#8c8a80;font-size:10px">${money ? "$" : ""}${fmt(v)}</text>`).join("");
+  const bars = series.filter((s) => s.type === "bar"), lines = series.filter((s) => s.type !== "bar");
+  const bw = Math.max(2, (w / rows.length) - 2) / Math.max(1, bars.length);
+  rows.forEach((r, i) => bars.forEach((s, j) => { const v = r[s.k], yy = y(v); svg += `<rect x="${x(i) - (bars.length * bw) / 2 + j * bw + 1}" y="${yy}" width="${bw - 2 + (bars.length > 1 ? 0 : 0)}" height="${Math.max(0, P.t + h - yy)}" rx="2" fill="${s.c}" data-i="${i}"/>`; }));
+  for (const s of lines) { const d = rows.map((r, i) => `${i ? "L" : "M"}${x(i)},${y(r[s.k])}`).join(""); svg += `<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2" stroke-linejoin="round"/>`; rows.forEach((r, i) => { if (r[s.k] && rows.length <= 31) svg += `<circle cx="${x(i)}" cy="${y(r[s.k])}" r="3" fill="${s.c}" stroke="#14131e" stroke-width="1.5"/>`; }); }
+  // hover columns
+  rows.forEach((r, i) => { svg += `<rect x="${x(i) - w / rows.length / 2}" y="${P.t}" width="${w / rows.length}" height="${h}" fill="transparent" data-i="${i}" class="hit"/>`; });
+  const step = Math.ceil(rows.length / 6);
+  rows.forEach((r, i) => { if (i % step === 0 || i === rows.length - 1) svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" style="fill:#8c8a80;font-size:10px">${r.day.slice(5)}</text>`; });
+  svg += "</svg>";
+  el.innerHTML = (series.length > 1 ? `<div class="legend">${series.map((s) => `<span><i style="background:${s.c}"></i>${s.n}</span>`).join("")}</div>` : "") + svg;
+  el.querySelectorAll(".hit").forEach((hit) => { hit.addEventListener("mousemove", (e) => { const r = rows[hit.dataset.i]; showTip(e, `<b>${r.day}</b><br>${series.map((s) => `${s.n}: ${money ? "$" : ""}${fmt(r[s.k], 2)}`).join("<br>")}`); }); hit.addEventListener("mouseleave", hideTip); });
+}
+
+async function load() {
+  const r = await fetch(`/api/analytics?days=${days}`, { headers: token ? { "x-admin-token": token } : {} });
+  data = await r.json(); render();
+}
+function delta(g) { if (!g || g.pct == null) return `<span class="d">${t("prev", fmt(g?.prev7 ?? 0, 2))}</span>`; const up = g.pct >= 0; return `<span class="d ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${fmt(Math.abs(g.pct), 1)}% · ${t("prev", fmt(g.prev7, 2))}</span>`; }
+function render() {
+  const a = data, S = a.series, K = t("kpi"), g = a.growth;
+  const sum = (k) => S.reduce((x, r) => x + r[k], 0), last7 = (k) => S.slice(-7).reduce((x, r) => x + r[k], 0);
+  const mm = (s) => s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  const tiles = [
+    [K.visits, fmt(g.visits.last7), delta(g.visits)], [K.uniques, fmt(g.uniques.last7), delta(g.uniques)], [K.newWallets, fmt(g.newWallets.last7), delta(g.newWallets)],
+    [K.stones, fmt(g.stones.last7), delta(g.stones)], [K.revenue, `$${fmt(g.revenue.last7, 2)}`, delta(g.revenue)], [K.blessings, fmt(g.blessings.last7), delta(g.blessings)],
+    [K.time, mm(a.avgSeconds), ""], [K.activation, a.funnel.wallets ? `${fmt(a.funnel.activated / a.funnel.wallets * 100, 1)}%` : "—", `<span class="d">${fmt(a.funnel.activated)} / ${fmt(a.funnel.wallets)}</span>`], [K.paidConv, a.funnel.wallets ? `${fmt(a.funnel.paid / a.funnel.wallets * 100, 2)}%` : "—", `<span class="d">${fmt(a.funnel.paid)} / ${fmt(a.funnel.wallets)}</span>`],
+  ];
+  $("kpis").innerHTML = tiles.map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>${d}</div>`).join("");
+  const Lg = t("legend");
+  chart($("traffic"), S, [{ k: "visits", n: Lg.visits, c: "#3987e5", type: "bar" }, { k: "uniques", n: Lg.uniques, c: "#d95926", type: "line" }]);
+  chart($("stones"), S, [{ k: "stones", n: Lg.stones, c: "#3987e5", type: "bar" }, { k: "paidStones", n: Lg.paidStones, c: "#c98500", type: "line" }]);
+  chart($("revenue"), S, [{ k: "revenue", n: Lg.revenue, c: "#199e70", type: "bar" }], { money: true });
+  chart($("engage"), S, [{ k: "blessings", n: Lg.blessings, c: "#d95926", type: "bar" }, { k: "onchain", n: Lg.onchain, c: "#3987e5", type: "line" }]);
+  const F = t("funnel"), f = a.funnel, fmax = Math.max(1, f.wallets);
+  $("funnel").innerHTML = [[F[0], f.wallets], [F[1], f.activated], [F[2], f.paid]].map(([n, v]) => `<div><div class="val">${fmt(v)}</div><div class="bar" style="height:${Math.max(3, v / fmax * 90)}px"></div><div class="lbl">${n}${v !== f.wallets ? ` · ${fmt(v / fmax * 100, 1)}%` : ""}</div></div>`).join("");
+  const R = t("ret"), rt = a.retention;
+  $("retention").innerHTML = [[R.d1, rt.d1 == null ? "—" : `${fmt(rt.d1, 1)}%`], [R.d7, rt.d7 == null ? "—" : `${fmt(rt.d7, 1)}%`], [R.cohort, fmt(rt.cohort)]].map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+  $("retNote").textContent = t("retNote", rt.cohort);
+  // sources (admin)
+  $("adminBox").innerHTML = a.admin ? `${t("adminOn")}<a href="/api/analytics.csv?days=${days}&token=${encodeURIComponent(token)}">${t("csv")}</a>` : `${t("adminOff")}<a href="#" id="adminBtn">${t("adminBtn")}</a>`;
+  $("adminBtn")?.addEventListener("click", (e) => { e.preventDefault(); const v = prompt("ADMIN_TOKEN"); if (v) { token = v; sessionStorage.setItem("cairn_admin", v); load(); } });
+  $("sourcesCard").classList.toggle("hidden", !a.admin);
+  if (a.admin) { const Sr = t("src"), tot = Math.max(1, a.sources.reduce((x, r) => x + r.visits, 0)); $("sources").innerHTML = `<tr><th>${Sr.source}</th><th class="n">${Sr.visits}</th><th class="n">${Sr.uniques}</th><th class="n">${Sr.share}</th></tr>` + a.sources.map((r) => `<tr><td>${r.source === "direct" ? t("direct") : esc(r.source)}</td><td class="n">${fmt(r.visits)}</td><td class="n">${fmt(r.uniques)}</td><td class="n">${fmt(r.visits / tot * 100, 1)}%</td></tr>`).join(""); }
+  // table view
+  $("tableCard").classList.toggle("hidden", !tableOn);
+  if (tableOn) { const cols = Object.keys(S[0]); $("daily").innerHTML = `<tr>${cols.map((c) => `<th class="${c === "day" ? "" : "n"}">${c}</th>`).join("")}</tr>` + [...S].reverse().map((r) => `<tr>${cols.map((c) => `<td class="${c === "day" ? "" : "n"}">${c === "day" ? r[c] : c === "revenue" ? "$" + fmt(r[c], 2) : fmt(r[c])}</td>`).join("")}</tr>`).join(""); }
+  $("updated").textContent = t("updated", new Date(a.at).toLocaleTimeString());
+  renderChain(a);
+}
+async function renderChain(a) {
+  const cfg = a.chain, C = t("chain"), el = $("chain");
+  if (!cfg) { el.innerHTML = `<div class="tile"><div class="k">${C.none}</div></div>`; return; }
+  el.innerHTML = `<div class="tile"><div class="k">${C.onchain}</div><div class="v">${fmt(a.totals.onchain)}</div></div>`;
+  try {
+    const { ethers } = await import("/vendor/ethers/dist/ethers.min.js");
+    const ro = new ethers.JsonRpcProvider(cfg.rpcUrl, cfg.chainId, { staticNetwork: true });
+    const share = new ethers.Contract(cfg.revenueShare, cfg.shareAbi, ro);
+    const staked = await share.totalStaked(); const parts = [];
+    for (const s of cfg.stables) { const d = await share.distributed(s.address); if (d > 0n) parts.push(`${fmt(ethers.formatUnits(d, s.decimals), 2)} ${s.symbol}`); }
+    let raised = null; if (cfg.sale) raised = await new ethers.Contract(cfg.sale, ["function raised() view returns (uint256)"], ro).raised();
+    el.innerHTML += `<div class="tile"><div class="k">${C.raised}</div><div class="v">${raised == null ? "—" : "$" + fmt(ethers.formatUnits(raised, 6))}</div></div><div class="tile"><div class="k">${C.staked}</div><div class="v">${fmt(ethers.formatUnits(staked, 18))}</div></div><div class="tile"><div class="k">${C.stakers}</div><div class="v" style="font-size:${parts.length > 1 ? 15 : 24}px">${parts.length ? parts.join(" · ") : "0"}</div></div>`;
+  } catch (e) { console.warn("chain read failed", e); }
+}
+$("range").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; days = Number(b.dataset.d); $("range").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); load(); });
+$("tableToggle").addEventListener("click", () => { tableOn = !tableOn; render(); });
+await load(); setInterval(load, 60_000);
+</script>
+</body>
+</html>

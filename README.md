@@ -113,6 +113,39 @@ next visit (never switching chains behind the user's back); follows account and 
 links for transactions. Without an injected wallet, phones get "open in MetaMask / Coinbase Wallet / Trust"
 deep links and desktops a link to install one. No wallet SDK, no project id, no build step.
 
+## Analytics: acquisition, engagement, payments, investment, growth
+
+`/analytics` (public; `?lang=ko`) reads `GET /api/analytics?days=7|30|90`:
+
+- **Acquisition**: visits and unique wishers per day, new wishers, traffic sources (operator only: utm_source /
+  `?ref=` / referrer host). Visits come from a first-party `sendBeacon` in the page (`POST /api/visit`: a random
+  visit id, referrer, query string, language, seconds on page at `pagehide`). No third-party script, no fingerprint.
+- **Engagement**: stones per day, blessings, average time on page, visit → stone activation, D1 / D7 retention of
+  new wishers (cohorts at least 8 days old).
+- **Payments**: pack revenue per day, orders created vs paid, wisher → buyer conversion.
+- **Investment**: on-chain stones per day; sale raised, CAIRN staked and lifetime distributions read from the chain.
+- **Growth**: every KPI tile shows the last 7 days against the 7 before, with the % change.
+
+Operator view: open `/analytics?token=<ADMIN_TOKEN>` once (stored in sessionStorage) or use the "enter token"
+link; it adds the sources table and `GET /api/analytics.csv` (daily rows, 90 days). Seeded stones are excluded
+from every visitor metric and never labelled. The chart palette was validated for colour-vision deficiency on the
+dark surface.
+
+## Launch clip: `tools/make-video.mjs`
+
+Renders a vertical 1080×1920 MP4 of stones dropping onto the live tower, for X / TikTok / Shorts:
+
+```bash
+node tools/make-video.mjs --url http://localhost:3000 --names "Sora,Minjun,Aroha,Diego,Yuki,Amara" \
+     --seconds 18 --fps 24 --caption "wishcairn.app" --sub "one tower · stacked by the whole world" --out out/tower.mp4
+```
+
+The page is opened with `?video=1`: it stops animating on its own and exposes `window.__video` (`step(dt)`,
+`drop(name)`, `caption(title, sub)`), so every frame is simulated deterministically, screenshotted and piped into
+ffmpeg. Dropped stones exist only in the capture; nothing is written to the server. Needs ffmpeg and Playwright
+(`npm i -D playwright && npx playwright install chromium`). About 0.7 s per frame on a CPU renderer, so an 18 s
+clip takes 4–5 minutes; `--lang ko` for Korean HUD text.
+
 ## Virtual early users (seeding)
 
 An empty tower is the worst first impression. `tools/seed-users.mjs` creates virtual early users:
