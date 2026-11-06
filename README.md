@@ -79,6 +79,10 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
+**Investor page `/invest`**: connect a wallet to see tower height, lifetime distributions, total staked and your
+share; buy in the public sale (with the sale's progress, claim or refund after finalization); stake and
+unstake CAIRN; see claimable revenue per stablecoin and claim it all at once. Korean with `/invest?lang=ko`.
+
 Server side (`chain-link.js`): set `CHAIN_DEPLOYMENT=chain/deployments/base.json`, `CHAIN_RPC_URL`, and
 `VOUCHER_SIGNER_KEY` (the key whose address was deployed as the contract's voucher signer). The server then
 exposes the chain config on `/api/me`, registers wish text + salt for a hash on `POST /api/chain/prepare`, and
@@ -137,6 +141,7 @@ Keep sacred-site imagery stylized; the prompts avoid people, text and religious 
 ```
 server.js                 SQLite stones + wallets + orders · /api/me · GET/POST /api/stones · /api/buy · PayPal return · /pay/mock · /api/events (SSE) · static
 index.html                the 3D scene, UI, live updates (one file, ES modules via import map)
+invest.html               investor page: sale, staking, revenue claims (ethers v6)
 tools/generate-assets.mjs generative asset pipeline → assets/manifest.json
 tools/seed-users.mjs      virtual early users: Claude-written wishes, backfill + live modes
 chain-link.js             chain config, EIP-712 voucher signing, Stacked event indexer

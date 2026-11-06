@@ -242,9 +242,9 @@ function serveStatic(req, res, url) {
 }
 
 // ---------- http ----------
-const INDEX_PATH = path.join(HERE, "index.html");
-let indexCache = null;
-const index = () => (process.env.NODE_ENV === "production" ? (indexCache ??= readFileSync(INDEX_PATH)) : readFileSync(INDEX_PATH));
+const pageCache = new Map();
+const page = (name) => { const f = path.join(HERE, name); return process.env.NODE_ENV === "production" ? (pageCache.get(f) ?? (pageCache.set(f, readFileSync(f)), pageCache.get(f))) : readFileSync(f); };
+const index = () => page("index.html");
 const json = (res, status, body, headers = {}) => { res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { let b = ""; req.on("data", (c) => { b += c; if (b.length > 4096) req.destroy(); }); req.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch { resolve({}); } }); });
 const cookieOf = (req, name) => req.headers.cookie?.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))?.[1];
@@ -268,6 +268,10 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(index());
+    }
+    if (req.method === "GET" && url.pathname === "/invest") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+      return res.end(page("invest.html"));
     }
 
     if (req.method === "GET" && url.pathname === "/api/me") {
