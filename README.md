@@ -292,6 +292,15 @@ background above the clouds. The garden view and the ceremony are unaffected.
 light on the tower, always visible, so the most blessed wishes can be found without tapping. The Recent wishes panel
 pins the three most blessed wishes of the day (of the week while the day has none), updated live on every blessing.
 
+## Sharing to X (and anywhere else)
+
+After stacking, the panel offers **Show off on X** (opens the X composer with the wish, the tower height, the stone
+number and a link that lands on that stone and carries the wisher's invite code) and **Picture card** (a 1200×630
+PNG drawn from the live frame: the tower as it looks now, the nameplate, the wish if public, the height and the site;
+on phones it goes to the system share sheet, elsewhere it downloads and the X composer opens). Every link to
+`/?s=<id>` carries per-stone Open Graph tags (the wisher's name, the public wish text, the height, `assets/og.jpg`),
+so a shared link unfurls into a card on X, Telegram, KakaoTalk and Discord without the user doing anything.
+
 ## Invitations
 
 Every wallet has a six-character invite code (`walletState.invite`). "Invite a friend" shares `/?i=<code>`, and the

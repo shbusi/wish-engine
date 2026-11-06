@@ -536,6 +536,21 @@ function serveStatic(req, res, url) {
 const pageCache = new Map();
 const page = (name) => { const f = path.join(HERE, name); return process.env.NODE_ENV === "production" ? (pageCache.get(f) ?? (pageCache.set(f, readFileSync(f)), pageCache.get(f))) : readFileSync(f); };
 const index = () => page("index.html");
+const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+/** Open Graph / Twitter card for the page: absolute image, and for ?s=<id> the stone's own title and wish (public text only). */
+function withOg(html, url) {
+  const ko = (url.searchParams.get("lang") ?? "").startsWith("ko"), s = url.searchParams.get("s") && stoneById(url.searchParams.get("s"));
+  const h = (count() * STONE_CM / 100).toFixed(2), name = s?.name || (ko ? "익명" : "anonymous");
+  const title = s ? (ko ? `${name}의 소원 · 소원 돌탑 ${h} m` : `${name}'s wish · Wish Cairn, ${h} m`) : (ko ? "소원 돌탑 · 궁창 아래" : "Wish Cairn · Under the Firmament");
+  const desc = s ? (s.wish != null ? `“${s.wish}”` : ko ? "봉인된 소원" : "A sealed wish") + (ko ? ` · 온 세상이 함께 쌓는 탑의 ${s.id.toLocaleString()}번째 돌. 당신의 돌도 올려 보세요.` : ` · stone #${s.id.toLocaleString()} on the tower the whole world stacks. Stack yours.`)
+    : (ko ? `온 세상이 함께 쌓는 소원 돌탑, 지금 ${h} m. 돌을 올리고 소원을 비세요.` : `One tower rising to the firmament, stacked by everyone. ${h} m so far. Add a stone, make a wish.`);
+  const img = `${APP_URL()}/assets/og.jpg`, pageUrl = `${APP_URL()}/${url.search}`;
+  return html.replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${escAttr(title)}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${escAttr(desc)}">`)
+    .replace(/<meta property="og:image" content="[^"]*">/, `<meta property="og:image" content="${escAttr(img)}"><meta property="og:url" content="${escAttr(pageUrl)}">`)
+    .replace(/<meta name="twitter:image" content="[^"]*">/, `<meta name="twitter:image" content="${escAttr(img)}">`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${escAttr(title)}</title>`);
+}
 const json = (res, status, body, headers = {}) => { res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { let b = ""; req.on("data", (c) => { b += c; if (b.length > 4096) req.destroy(); }); req.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch { resolve({}); } }); });
 const cookieOf = (req, name) => req.headers.cookie?.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))?.[1];
@@ -622,7 +637,7 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
-      return res.end(index());
+      return res.end(withOg(index().toString(), url));
     }
     if (req.method === "GET" && url.pathname === "/invest") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
