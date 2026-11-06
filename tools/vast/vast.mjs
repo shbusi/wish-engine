@@ -116,5 +116,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else if (cmd === "destroy") show(await destroy(arg));
   else if (cmd === "fetch") show(await fetchRun(arg));
   else if (cmd === "job") show(await jobStatus(arg));
+  else if (cmd === "log") console.log((await s3Text(`${PREFIX}/${arg}/log.txt`)) ?? "(no log yet)");
   else console.log("offers | offers24 | s3 | rent <offerId> | status [runId] | job <runId> | fetch <runId> | destroy <id>");
 }

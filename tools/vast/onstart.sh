@@ -5,7 +5,9 @@ export DEBIAN_FRONTEND=noninteractive HF_HUB_ENABLE_HF_TRANSFER=1 PYTHONUNBUFFER
 INSTANCE_ID="${VAST_CONTAINERLABEL#C.}"
 {
   echo "== $(date -u) start on $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
-  pip install -q "diffusers>=0.32" "transformers>=4.46" accelerate sentencepiece protobuf pillow numpy boto3 "huggingface_hub[hf_transfer]" 2>&1 | tail -3
+  # Pinned to a combination verified to load SDXL and FLUX pipelines (newest transformers 5.x broke SDXL loading).
+  pip install -q "diffusers==0.35.1" "transformers==4.56.2" "tokenizers==0.22.0" "huggingface_hub[hf_transfer]==0.35.3" "accelerate==1.10.1" sentencepiece protobuf pillow numpy boto3 hf_transfer 2>&1 | tail -3
+  python -c "import torch, diffusers, transformers; print('torch', torch.__version__, 'diffusers', diffusers.__version__, 'transformers', transformers.__version__, 'cuda', torch.cuda.is_available())"
   cat > generate.py <<'PY'
 __GENERATE_PY__
 PY
