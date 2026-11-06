@@ -67,9 +67,11 @@ Every visitor gets an anonymous wallet (httpOnly cookie, no account).
 
 `chain/` is a separate Hardhat project (`cd chain && npm install && npm test`, 10 tests, compiles offline).
 
-- **StoneCairn** (ERC-721): every stone is an NFT. `stack()` pays USDC ($0.10), split 50/50 between the
-  treasury and a buyback pool that buys and burns CAIRN. `stackFree()` redeems an EIP-712 voucher the
-  server signs for the daily free stone, so web2 and chain share one rule. Only the wish's hash goes on-chain.
+- **StoneCairn** (ERC-721): every stone is an NFT. `stackWith(token, …)` pays in any whitelisted stablecoin
+  (USDC, EURC, JPYC, BRZ … each with its own price), split 50/50 between the treasury and **RevenueShare**.
+  `stackFree()` redeems an EIP-712 voucher the server signs for the daily free stone. Only the wish's hash goes on-chain.
+- **RevenueShare**: stake CAIRN and receive the tower's revenue pro-rata, in the stablecoins it arrived in.
+  The operator can `deposit()` off-chain revenue (card payments converted to USDC) into the same pool.
 - **CairnToken** (ERC-20): fixed 1B supply minted once (community 40 / sale 25 / team 15 / treasury 15 / liquidity 5),
   no owner, no mint. Team tokens sit in OpenZeppelin's VestingWallet, 24 months linear.
 - **CairnSale**: fixed-price USDC sale with soft cap, hard cap, per-wallet cap and a window. Soft cap missed →

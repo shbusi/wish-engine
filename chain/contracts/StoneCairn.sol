@@ -10,11 +10,15 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
+interface IRevenueSink {
+    function notify(address token, uint256 amount) external;
+}
+
 /// @title StoneCairn — every stone on the tower is an NFT.
-/// @notice `stack` pays the stone price in USDC, split between the treasury and the CAIRN buyback pool.
-///         `stackFree` redeems a voucher signed by the backend (the "one free stone a day"), so the
-///         web2 economy and the chain agree on who gets a free stone. The wish text itself stays off-chain;
-///         only its hash is recorded, so a wish can be proven later without being published.
+/// @notice A stone can be paid for in any whitelisted stablecoin (USDC, EURC, JPYC, BRZ, …), each with its own
+///         price in that token's units. Every payment is split between the treasury and the RevenueShare
+///         contract, where CAIRN stakers receive it pro-rata in the same stablecoin. `stackFree` redeems a
+///         voucher signed by the backend (the "one free stone a day"). Only the wish's hash is recorded on-chain.
 contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -22,14 +26,17 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
         bytes32 wishHash; // keccak256 of the wish text (+ salt) kept by the wisher / backend
         string name;      // engraved name, up to 32 bytes
         uint64 at;        // block timestamp
-        bool free;        // redeemed with a voucher
+        address token;    // stablecoin paid with (zero for a free stone)
+        uint256 amount;   // amount paid in that token's units
     }
 
-    IERC20 public immutable usdc;
-    uint256 public price;          // USDC (6 decimals) per stone, e.g. 100_000 = $0.10
+    address public defaultToken;                  // used by stack()
+    mapping(address => uint256) public priceOf;   // token → price in token units; 0 = not accepted
+    address[] public acceptedTokens;
+
     address public treasury;
-    address public buyback;        // receives buybackBps of every paid stone; buys and burns CAIRN
-    uint16 public buybackBps;      // out of 10_000
+    address public revenueShare;   // RevenueShare contract (stakers)
+    uint16 public revenueBps;      // share of every payment sent to stakers, out of 10_000
     address public voucherSigner;  // backend key that signs free-stone vouchers
     string public baseURI;
 
@@ -39,33 +46,47 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
 
     bytes32 private constant VOUCHER_TYPEHASH = keccak256("Voucher(address to,uint256 nonce,uint256 expires)");
 
-    event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free);
-    event PriceSet(uint256 price);
-    event SplitSet(address treasury, address buyback, uint16 buybackBps);
+    event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free, address token, uint256 amount);
+    event PriceSet(address indexed token, uint256 price);
+    event SplitSet(address treasury, address revenueShare, uint16 revenueBps);
     event SignerSet(address signer);
 
-    constructor(IERC20 usdc_, uint256 price_, address treasury_, address buyback_, address signer_, address owner_)
+    constructor(address usdc_, uint256 usdcPrice_, address treasury_, address revenueShare_, uint16 revenueBps_, address signer_, address owner_)
         ERC721("Wish Cairn Stone", "STONE")
         EIP712("WishCairn", "1")
         Ownable(owner_)
     {
-        require(address(usdc_) != address(0) && treasury_ != address(0) && buyback_ != address(0), "zero address");
-        usdc = usdc_;
-        price = price_;
+        require(usdc_ != address(0) && treasury_ != address(0) && revenueBps_ <= 10_000, "bad params");
+        _setPrice(usdc_, usdcPrice_);
+        defaultToken = usdc_;
         treasury = treasury_;
-        buyback = buyback_;
-        buybackBps = 5000;
+        revenueShare = revenueShare_;
+        revenueBps = revenueShare_ == address(0) ? 0 : revenueBps_;
         voucherSigner = signer_;
     }
 
     // ---------------------------------------------------------------- stacking
 
-    /// @notice Pay `price` USDC and put a stone on the tower.
+    /// @notice Pay with the default stablecoin.
     function stack(bytes32 wishHash, string calldata name) external nonReentrant returns (uint256 id) {
-        uint256 toBuyback = price * buybackBps / 10_000;
-        if (price - toBuyback > 0) usdc.safeTransferFrom(msg.sender, treasury, price - toBuyback);
-        if (toBuyback > 0) usdc.safeTransferFrom(msg.sender, buyback, toBuyback);
-        id = _stack(msg.sender, wishHash, name, false);
+        id = _pay(defaultToken, wishHash, name);
+    }
+
+    /// @notice Pay with any accepted stablecoin.
+    function stackWith(address token, bytes32 wishHash, string calldata name) external nonReentrant returns (uint256 id) {
+        id = _pay(token, wishHash, name);
+    }
+
+    function _pay(address token, bytes32 wishHash, string calldata name) internal returns (uint256 id) {
+        uint256 price = priceOf[token];
+        require(price > 0, "token not accepted");
+        uint256 toStakers = price * revenueBps / 10_000;
+        if (price - toStakers > 0) IERC20(token).safeTransferFrom(msg.sender, treasury, price - toStakers);
+        if (toStakers > 0) {
+            IERC20(token).safeTransferFrom(msg.sender, revenueShare, toStakers);
+            IRevenueSink(revenueShare).notify(token, toStakers);
+        }
+        id = _stack(msg.sender, wishHash, name, token, price);
     }
 
     /// @notice Redeem a backend-signed voucher for a free stone (one per voucher).
@@ -79,15 +100,15 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
         require(!usedVoucher[digest], "voucher used");
         require(ECDSA.recover(digest, signature) == voucherSigner, "bad voucher");
         usedVoucher[digest] = true;
-        id = _stack(msg.sender, wishHash, name, true);
+        id = _stack(msg.sender, wishHash, name, address(0), 0);
     }
 
-    function _stack(address to, bytes32 wishHash, string calldata name, bool free) internal returns (uint256 id) {
+    function _stack(address to, bytes32 wishHash, string calldata name, address token, uint256 amount) internal returns (uint256 id) {
         require(bytes(name).length <= 32, "name too long");
         id = nextId++;
-        stones[id] = Stone({wishHash: wishHash, name: name, at: uint64(block.timestamp), free: free});
+        stones[id] = Stone({wishHash: wishHash, name: name, at: uint64(block.timestamp), token: token, amount: amount});
         _mint(to, id);
-        emit Stacked(id, to, wishHash, name, id, free);
+        emit Stacked(id, to, wishHash, name, id, token == address(0), token, amount);
     }
 
     /// @notice Number of stones on the tower.
@@ -95,19 +116,37 @@ contract StoneCairn is ERC721, EIP712, Ownable, ReentrancyGuard {
         return nextId - 1;
     }
 
-    // ---------------------------------------------------------------- admin
-
-    function setPrice(uint256 price_) external onlyOwner {
-        price = price_;
-        emit PriceSet(price_);
+    function acceptedTokenCount() external view returns (uint256) {
+        return acceptedTokens.length;
     }
 
-    function setSplit(address treasury_, address buyback_, uint16 buybackBps_) external onlyOwner {
-        require(treasury_ != address(0) && buyback_ != address(0) && buybackBps_ <= 10_000, "bad split");
+    // ---------------------------------------------------------------- admin
+
+    /// @notice Set (or, with 0, remove) the price of a stone in `token` units. Stablecoins track fiat, so this
+    ///         is refreshed by the operator; it can be driven by an oracle later.
+    function setPrice(address token, uint256 price) external onlyOwner {
+        _setPrice(token, price);
+    }
+
+    function _setPrice(address token, uint256 price) internal {
+        require(token != address(0), "zero token");
+        if (priceOf[token] == 0 && price > 0) acceptedTokens.push(token);
+        priceOf[token] = price;
+        emit PriceSet(token, price);
+    }
+
+    function setDefaultToken(address token) external onlyOwner {
+        require(priceOf[token] > 0, "token not accepted");
+        defaultToken = token;
+    }
+
+    function setSplit(address treasury_, address revenueShare_, uint16 revenueBps_) external onlyOwner {
+        require(treasury_ != address(0) && revenueBps_ <= 10_000, "bad split");
+        require(revenueShare_ != address(0) || revenueBps_ == 0, "no sink");
         treasury = treasury_;
-        buyback = buyback_;
-        buybackBps = buybackBps_;
-        emit SplitSet(treasury_, buyback_, buybackBps_);
+        revenueShare = revenueShare_;
+        revenueBps = revenueBps_;
+        emit SplitSet(treasury_, revenueShare_, revenueBps_);
     }
 
     function setVoucherSigner(address signer_) external onlyOwner {

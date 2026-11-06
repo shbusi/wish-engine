@@ -9,12 +9,19 @@ try { if (process.env.CHAIN_DEPLOYMENT) cfg = JSON.parse(readFileSync(process.en
 if (cfg) cfg.rpcUrl = process.env.CHAIN_RPC_URL ?? (cfg.network === "base" ? "https://mainnet.base.org" : cfg.network === "baseSepolia" ? "https://sepolia.base.org" : "http://127.0.0.1:8545");
 
 export const ABI = [
-  "event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free)",
+  "event Stacked(uint256 indexed id, address indexed owner, bytes32 wishHash, string name, uint256 height, bool free, address token, uint256 amount)",
   "function stack(bytes32 wishHash, string name) returns (uint256)",
+  "function stackWith(address token, bytes32 wishHash, string name) returns (uint256)",
   "function stackFree(bytes32 wishHash, string name, uint256 nonce, uint256 expires, bytes signature) returns (uint256)",
-  "function price() view returns (uint256)",
+  "function priceOf(address token) view returns (uint256)",
+  "function defaultToken() view returns (address)",
   "function height() view returns (uint256)",
-  "function usdc() view returns (address)",
+];
+export const SHARE_ABI = [
+  "function stake(uint256 amount)", "function unstake(uint256 amount)", "function claim()",
+  "function staked(address) view returns (uint256)", "function totalStaked() view returns (uint256)",
+  "function claimable(address user) view returns (address[] tokens, uint256[] amounts)",
+  "function distributed(address token) view returns (uint256)",
 ];
 export const ERC20_ABI = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)", "function balanceOf(address) view returns (uint256)"];
 
@@ -22,7 +29,7 @@ export const chain = () => cfg;
 /** What the page needs: addresses, chain id, rpc, price. Never the signer key. */
 export function chainPublic() {
   if (!cfg) return null;
-  return { network: cfg.network, chainId: cfg.chainId, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, usdc: cfg.usdc, token: cfg.token, sale: cfg.sale, stonePrice: cfg.stonePrice, abi: ABI, erc20Abi: ERC20_ABI };
+  return { network: cfg.network, chainId: cfg.chainId, rpcUrl: cfg.rpcUrl, stoneCairn: cfg.stoneCairn, revenueShare: cfg.revenueShare, revenueBps: cfg.revenueBps, stables: cfg.stables ?? [{ symbol: "USDC", address: cfg.usdc, decimals: 6, price: cfg.stonePrice }], token: cfg.token, sale: cfg.sale, abi: ABI, shareAbi: SHARE_ABI, erc20Abi: ERC20_ABI };
 }
 
 /** keccak256(wish|salt): the chain sees the hash, the server keeps the text. */
@@ -61,7 +68,7 @@ export function startIndexer({ onStacked, fromTokenId = 1, intervalMs = Number(p
         const id = Number(ev.args.id);
         if (id < fromTokenId) continue;
         const block = await ev.getBlock();
-        onStacked({ tokenId: id, owner: ev.args.owner, wishHash: ev.args.wishHash, name: ev.args.name, free: ev.args.free, at: block.timestamp * 1000 });
+        onStacked({ tokenId: id, owner: ev.args.owner, wishHash: ev.args.wishHash, name: ev.args.name, free: ev.args.free, token: ev.args.token, amount: ev.args.amount?.toString(), at: block.timestamp * 1000 });
       }
       lastBlock = to + 1;
     } catch (e) { console.error("indexer:", e.message?.slice(0, 160)); }
