@@ -1,5 +1,12 @@
 {
   "_comment": "Filled by `node tools/generate-assets.mjs`. Any missing key falls back to the procedural look in index.html.",
-  "skybox": null,
-  "stone": { "albedo": null, "normal": null, "roughness": null, "model": null }
+  "skybox": "/assets/skybox.jpg",
+  "stone": {
+    "albedo": "/assets/stone_albedo_alt.jpg",
+    "normal": "/assets/stone_normal.jpg",
+    "roughness": "/assets/stone_roughness.jpg",
+    "model": null,
+    "repeat": 0.55
+  },
+  "skyboxVisible": false
 }

@@ -182,7 +182,7 @@ const skyMat = new THREE.ShaderMaterial({
       float m = max(dot(d, moonDir), 0.); c += vec3(0.95,0.85,0.7) * (pow(m, 400.) * 1.2 + pow(m, 24.) * 0.06);
       gl_FragColor = vec4(c, 1.); }`,
 });
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), skyMat));
+{ const dome = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), skyMat); dome.name = "skydome"; scene.add(dome); }
 { // stars
   const n = 2200, pos = new Float32Array(n * 3), sz = new Float32Array(n);
   for (let i = 0; i < n; i++) { const v = new THREE.Vector3().randomDirection(); if (v.y < 0.02) v.y = Math.abs(v.y) + 0.02; v.multiplyScalar(280); pos.set([v.x, v.y, v.z], i * 3); sz[i] = Math.random(); }
@@ -596,13 +596,15 @@ async function loadAssets() {
     const tl = new THREE.TextureLoader();
     if (m.skybox) {
       const sky = await tl.loadAsync(m.skybox); sky.mapping = THREE.EquirectangularReflectionMapping; sky.colorSpace = THREE.SRGBColorSpace;
-      scene.background = sky; scene.environment = pmrem.fromEquirectangular(sky).texture; scene.backgroundIntensity = 0.9;
+      scene.environment = pmrem.fromEquirectangular(sky).texture; // lighting + reflections from the generated sky
+      if (m.skyboxVisible) { scene.background = sky; scene.backgroundIntensity = 0.9; scene.getObjectByName("skydome").visible = false; }
     }
     if (m.stone?.albedo) {
-      const a = await tl.loadAsync(m.stone.albedo); a.wrapS = a.wrapT = THREE.RepeatWrapping; a.colorSpace = THREE.SRGBColorSpace; a.anisotropy = 8;
+      const rep = m.stone.repeat ?? 1; // < 1 shows a smaller patch of the texture per stone (reads as one surface, not a mosaic)
+      const a = await tl.loadAsync(m.stone.albedo); a.wrapS = a.wrapT = THREE.RepeatWrapping; a.repeat.set(rep, rep); a.colorSpace = THREE.SRGBColorSpace; a.anisotropy = 8;
       stoneMat.map = a; stoneMat.bumpMap = a; stoneMat.bumpScale = 0.9; stoneMat.needsUpdate = true;
-      if (m.stone.normal) { const n = await tl.loadAsync(m.stone.normal); n.wrapS = n.wrapT = THREE.RepeatWrapping; stoneMat.normalMap = n; stoneMat.bumpMap = null; }
-      if (m.stone.roughness) { const r = await tl.loadAsync(m.stone.roughness); r.wrapS = r.wrapT = THREE.RepeatWrapping; stoneMat.roughnessMap = r; }
+      if (m.stone.normal) { const n = await tl.loadAsync(m.stone.normal); n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(rep, rep); stoneMat.normalMap = n; stoneMat.normalScale.set(0.7, 0.7); stoneMat.bumpMap = null; }
+      if (m.stone.roughness) { const r = await tl.loadAsync(m.stone.roughness); r.wrapS = r.wrapT = THREE.RepeatWrapping; r.repeat.set(rep, rep); stoneMat.roughnessMap = r; }
       for (const st of stones) { st.mesh.material.map = stoneMat.map; st.mesh.material.bumpMap = stoneMat.bumpMap; st.mesh.material.normalMap = stoneMat.normalMap; st.mesh.material.roughnessMap = stoneMat.roughnessMap; st.mesh.material.needsUpdate = true; }
     }
     if (m.stone?.model) {

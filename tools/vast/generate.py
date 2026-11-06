@@ -90,9 +90,10 @@ try:
         return pipe(prompt, negative_prompt=NEG, width=width, height=height, generator=gen(seed), **params).images[0]
 
     # ---------- stone albedo (two candidates) ----------
-    stone_prompt = ("Seamless tileable texture of a smooth grey river stone surface, subtle warm brown mineral veins, "
-                    "fine granite speckle, slightly worn, photographed perfectly flat with soft even light, no shadows, "
-                    "no highlights, no edges, 8k PBR albedo material scan, uniform scale." + NEG_HINT)
+    # One continuous surface, not a pile of pebbles: SDXL reads "river stone" as many stones unless told it is a macro of one.
+    stone_prompt = ("Extreme close-up macro photograph of the surface of a single smooth grey granite stone filling the entire "
+                    "frame, fine mineral speckle, faint warm brown veins, matte, slightly worn, no edges of the stone visible, "
+                    "no other stones, photographed flat with soft even light, no shadows, seamless tileable PBR albedo material scan." + NEG_HINT)
     for i, seed in enumerate([11, 23]):
         status("stone", 20 + i * 20, f"albedo {i+1}/2")
         img = run(stone_prompt, 1024, 1024, seed)
