@@ -58,7 +58,7 @@
   </div>
 
   <div class="two">
-    <div class="card"><h2 data-i18n="funnelTitle">Funnel in this period · new wallets → placed a stone → paid</h2><div class="funnel" id="funnel"></div></div>
+    <div class="card"><h2 data-i18n="funnelTitle">Funnel in this period · new wallets → placed a stone → paid</h2><div class="funnel" id="funnel"></div><p class="muted" id="invited"></p></div>
     <div class="card"><h2 data-i18n="retTitle">Retention · new wishers who came back</h2><div class="grid" id="retention" style="margin:0"></div><p class="muted" id="retNote"></p></div>
   </div>
 
@@ -83,7 +83,7 @@ const T = {
     calc:{ newPerDay:"New wishers per day", growth:"Monthly growth of new wishers (%)", arpu:"Revenue per wisher (USD)", repeat:"Months a wisher keeps paying", price:"Token price (USD)", staked:"Share of supply staked (%)" },
     calcOut:{ wishersY:"Wishers after 12 months", revenueY:"Revenue, next 12 months", pool:"To stakers (50%)", giving:"To giving", yieldPct:"Stakers' yield", per1k:"On $1,000 of tokens, per year" },
     kpi:{ visits:"Visits", uniques:"Unique wishers visiting", newWallets:"New wishers", stones:"Stones", revenue:"Revenue (USD)", blessings:"Blessings", time:"Avg time on page", activation:"Visit → stone", paidConv:"Wisher → buyer" }, prev:(v)=>`prev ${v}`, legend:{ visits:"Visits", uniques:"Unique wishers", stones:"Stones", paidStones:"of which paid", revenue:"Revenue", blessings:"Blessings", onchain:"On-chain stones" },
-    funnel:["New wallets","Placed a stone","Bought a pack"], ret:{ d1:"Came back next day", d7:"Came back within 7 days", cohort:"Cohort size" }, retNote:(n)=>`Cohort: wishers whose first visit was in this period and at least 8 days ago (${n}).`,
+    funnel:["New wallets","Placed a stone","Bought a pack"], invitedLine:(i,r)=>`${i} of them came through a friend's invite link · ${r} stacked a first stone (both sides rewarded)`, ret:{ d1:"Came back next day", d7:"Came back within 7 days", cohort:"Cohort size" }, retNote:(n)=>`Cohort: wishers whose first visit was in this period and at least 8 days ago (${n}).`,
     chain:{ raised:"Sale raised", staked:"CAIRN staked", stakers:"Distributed to stakers", onchain:"On-chain stones", none:"On-chain layer not configured" },
     abTitle:"Karma UI test · wallets created in this period, by group", abNote:"KARMA_AB=1 splits wallets by id: even ids see karma and giving, odd ids do not. Compare activation and purchase rates.", abCols:["Group","Wallets","Placed a stone","Stones / wallet","Bought a pack"], abOn:"Karma shown", abOff:"Karma hidden",
     adminOn:"Operator view · ", adminOff:"Operator? ", adminBtn:"enter token", csv:"Download CSV", updated:(d)=>`updated ${d}`, src:{ source:"Source", visits:"Visits", uniques:"Unique", share:"Share" }, direct:"direct / unknown" },
@@ -94,7 +94,7 @@ const T = {
     calc:{ newPerDay:"하루 신규 소원자", growth:"신규 소원자 월 성장률 (%)", arpu:"소원자당 매출 (USD)", repeat:"한 소원자가 결제를 이어가는 개월 수", price:"토큰 가격 (USD)", staked:"스테이킹되는 공급 비율 (%)" },
     calcOut:{ wishersY:"12개월 뒤 소원자", revenueY:"향후 12개월 매출", pool:"스테이커 몫 (50%)", giving:"기부 몫", yieldPct:"스테이커 수익률", per1k:"토큰 $1,000당 연간" },
     kpi:{ visits:"방문", uniques:"고유 방문자", newWallets:"신규 방문자", stones:"돌", revenue:"매출 (USD)", blessings:"축복", time:"평균 체류", activation:"방문 → 돌", paidConv:"방문자 → 구매" }, prev:(v)=>`이전 ${v}`, legend:{ visits:"방문", uniques:"고유 방문자", stones:"돌", paidStones:"그중 유료", revenue:"매출", blessings:"축복", onchain:"온체인 돌" },
-    funnel:["신규 지갑","돌 올림","팩 구매"], ret:{ d1:"다음 날 재방문", d7:"7일 내 재방문", cohort:"코호트 크기" }, retNote:(n)=>`코호트: 이 기간에 처음 왔고 8일 이상 지난 방문자 (${n}명).`,
+    funnel:["신규 지갑","돌 올림","팩 구매"], invitedLine:(i,r)=>`그중 ${i}명은 친구 초대 링크로 왔고 ${r}명이 첫 돌을 올렸습니다 (양쪽 보상)`, ret:{ d1:"다음 날 재방문", d7:"7일 내 재방문", cohort:"코호트 크기" }, retNote:(n)=>`코호트: 이 기간에 처음 왔고 8일 이상 지난 방문자 (${n}명).`,
     chain:{ raised:"세일 모금", staked:"스테이킹된 CAIRN", stakers:"스테이커 분배 누적", onchain:"온체인 돌", none:"온체인 레이어 미설정" },
     abTitle:"카르마 UI 테스트 · 이 기간 신규 지갑, 그룹별", abNote:"KARMA_AB=1이면 지갑 id로 나눕니다. 짝수는 카르마·기부 표시, 홀수는 미표시. 활성화율과 구매율을 비교하세요.", abCols:["그룹","지갑","돌 올림","지갑당 돌","팩 구매"], abOn:"카르마 표시", abOff:"카르마 숨김",
     adminOn:"운영자 보기 · ", adminOff:"운영자? ", adminBtn:"토큰 입력", csv:"CSV 다운로드", updated:(d)=>`갱신 ${d}`, src:{ source:"경로", visits:"방문", uniques:"고유", share:"비중" }, direct:"직접 / 알 수 없음" },
@@ -158,6 +158,7 @@ function render() {
   chart($("engage"), S, [{ k: "blessings", n: Lg.blessings, c: "#d95926", type: "bar" }, { k: "onchain", n: Lg.onchain, c: "#3987e5", type: "line" }]);
   const F = t("funnel"), f = a.funnel, fmax = Math.max(1, f.wallets);
   $("funnel").innerHTML = [[F[0], f.wallets], [F[1], f.activated], [F[2], f.paid]].map(([n, v]) => `<div><div class="val">${fmt(v)}</div><div class="bar" style="height:${Math.max(3, v / fmax * 90)}px"></div><div class="lbl">${n}${v !== f.wallets ? ` · ${fmt(v / fmax * 100, 1)}%` : ""}</div></div>`).join("");
+  $("invited").textContent = a.invites ? t("invitedLine", fmt(a.invites.invited), fmt(a.invites.rewarded)) : "";
   const R = t("ret"), rt = a.retention;
   $("retention").innerHTML = [[R.d1, rt.d1 == null ? "—" : `${fmt(rt.d1, 1)}%`], [R.d7, rt.d7 == null ? "—" : `${fmt(rt.d7, 1)}%`], [R.cohort, fmt(rt.cohort)]].map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
   $("retNote").textContent = t("retNote", rt.cohort);

@@ -90,7 +90,14 @@ db.exec("CREATE INDEX IF NOT EXISTS visits_day ON visits(day)");
 db.exec(`CREATE TABLE IF NOT EXISTS events (type TEXT PRIMARY KEY, at INTEGER NOT NULL, total INTEGER NOT NULL, stone_id INTEGER, wallets INTEGER NOT NULL DEFAULT 0, credits INTEGER NOT NULL DEFAULT 0)`);
 try { db.exec("ALTER TABLE stones ADD COLUMN keystone INTEGER NOT NULL DEFAULT 0"); } catch {}   // the stone that touched the firmament
 try { db.exec("ALTER TABLE wallets ADD COLUMN seen_event INTEGER NOT NULL DEFAULT 0"); } catch {}
-try { db.exec("ALTER TABLE wallets ADD COLUMN karma INTEGER NOT NULL DEFAULT 0"); } catch {}      // good deeds: stones placed + blessings given
+try { db.exec("ALTER TABLE wallets ADD COLUMN karma INTEGER NOT NULL DEFAULT 0"); } catch {}
+// invitations: every wallet has a short code; a friend who arrives with ?i=<code> and stacks a first stone earns both of them a stone
+try { db.exec("ALTER TABLE wallets ADD COLUMN invite TEXT"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN invited_by INTEGER"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN invite_paid_at INTEGER"); } catch {}   // when the inviter was rewarded for this wallet's first stone
+try { db.exec("ALTER TABLE wallets ADD COLUMN invites_n INTEGER NOT NULL DEFAULT 0"); } catch {}  // friends who stacked a first stone
+try { db.exec("ALTER TABLE wallets ADD COLUMN seen_invites INTEGER NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS wallets_invite ON wallets (invite)"); } catch {}      // good deeds: stones placed + blessings given
 // Seeds: planted at the foot of the tower with the first stone; watered once a day on a visit; wilts a stage after 3 missed days
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_day INTEGER"); } catch {}                       // day index the seed was planted (null = none)
 try { db.exec("ALTER TABLE wallets ADD COLUMN seed_water INTEGER NOT NULL DEFAULT 0"); } catch {}   // waterings so far
@@ -167,6 +174,14 @@ const q = {
   karmaTotal: db.prepare("SELECT COALESCE(SUM(karma), 0) AS n FROM wallets"),
   abGroups: db.prepare("SELECT (id % 2) AS grp, COUNT(*) AS wallets, SUM(CASE WHEN placed > 0 THEN 1 ELSE 0 END) AS activated, SUM(placed) AS stones, SUM(CASE WHEN EXISTS (SELECT 1 FROM orders o WHERE o.wallet_id = wallets.id AND o.status = 'PAID') THEN 1 ELSE 0 END) AS paid FROM wallets WHERE created_at >= ? GROUP BY grp"),
   addCredits: db.prepare("UPDATE wallets SET credits = credits + ? WHERE id = ?"),
+  setInvite: db.prepare("UPDATE wallets SET invite = ? WHERE id = ? AND invite IS NULL"),
+  byInvite: db.prepare("SELECT id FROM wallets WHERE invite = ?"),
+  setInvitedBy: db.prepare("UPDATE wallets SET invited_by = ? WHERE id = ? AND invited_by IS NULL AND placed = 0"),
+  payInvite: db.prepare("UPDATE wallets SET invite_paid_at = ? WHERE id = ? AND invited_by IS NOT NULL AND invite_paid_at IS NULL"),
+  inviterRewardsToday: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE invited_by = ? AND invite_paid_at >= ?"),
+  countInvite: db.prepare("UPDATE wallets SET invites_n = invites_n + 1, credits = credits + ?, karma = karma + 1 WHERE id = ?"),
+  seenInvites: db.prepare("UPDATE wallets SET seen_invites = invites_n WHERE id = ?"),
+  aInvited: db.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN invite_paid_at IS NOT NULL THEN 1 ELSE 0 END) AS rewarded FROM wallets WHERE invited_by IS NOT NULL AND created_at >= ?"),
   newOrder: db.prepare("INSERT INTO orders (id, wallet_id, provider, provider_ref, stones, usd, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'CREATED', ?)"),
   order: db.prepare("SELECT * FROM orders WHERE id = ?"),
   orderByRef: db.prepare("SELECT * FROM orders WHERE provider = ? AND provider_ref = ?"),
@@ -196,7 +211,7 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, p?.private ? 1 : 0, at ?? Date.now());
   if (p) q.pendingDel.run(wishHash);
   if (r.changes === 0) return null;
-  if (p?.wallet_id) { q.addKarma.run(1, p.wallet_id); plantSeed(p.wallet_id, p.name, at ?? Date.now()); }
+  if (p?.wallet_id) { q.addKarma.run(1, p.wallet_id); plantSeed(p.wallet_id, p.name, at ?? Date.now()); rewardInvite(p.wallet_id, at ?? Date.now()); }
   const stone = pub(q.one.get(Number(r.lastInsertRowid)));
   broadcast({ type: "stone", stone, ...stats() });
   checkFirmament(stone.id);
@@ -221,12 +236,38 @@ export function createWallet() {
   return q.walletById.get(Number(r.lastInsertRowid));
 }
 export const walletByToken = (t) => (t ? q.walletByToken.get(t) : undefined);
+export const INVITE_REWARD = Number(process.env.INVITE_REWARD ?? 1);          // stones for each side when an invited friend stacks a first stone
+export const INVITE_DAILY_CAP = Number(process.env.INVITE_DAILY_CAP ?? 20);   // rewarded invitations per inviter per day (the friend still gets theirs)
+/** The wallet's invite code, minted on first use (6 chars, unambiguous alphabet). */
+export function inviteCode(w) {
+  if (w.invite) return w.invite;
+  const A = "abcdefghjkmnpqrstuvwxyz23456789";
+  for (let i = 0; i < 5; i++) { const c = Array.from(randomBytes(6), (b) => A[b % A.length]).join(""); if (q.setInvite.run(c, w.id).changes === 1) { w.invite = c; return c; } }
+  return q.walletById.get(w.id).invite;
+}
+/** A visitor arrived with ?i=<code>: remember who sent them. Only before their first stone, never themselves. */
+export function claimInvite(w, code) {
+  const inviter = q.byInvite.get(String(code ?? "").toLowerCase().slice(0, 12));
+  if (!inviter || inviter.id === w.id) return { ok: false };
+  return { ok: q.setInvitedBy.run(inviter.id, w.id).changes === 1 };
+}
+/** First stone of an invited wallet: both sides get INVITE_REWARD stones, the inviter +1 karma (capped per day). */
+function rewardInvite(walletId, now) {
+  const w = q.walletById.get(walletId);
+  if (!w?.invited_by || w.invite_paid_at) return null;
+  if (q.payInvite.run(now, w.id).changes === 0) return null;
+  q.addCredits.run(INVITE_REWARD, w.id);
+  const today = dayOf(now) * 86_400_000;
+  if (q.inviterRewardsToday.get(w.invited_by, today).n <= INVITE_DAILY_CAP) q.countInvite.run(INVITE_REWARD, w.invited_by);
+  return { inviter: w.invited_by, credits: INVITE_REWARD };
+}
 const dayOf = (ms) => Math.floor(ms / 86_400_000);
 export function walletState(w, now = Date.now()) {
   const blessFreeLeft = w.bless_day === dayOf(now) ? Math.max(0, FREE_BLESS_PER_DAY - w.bless_n) : FREE_BLESS_PER_DAY;
   const karma = w.karma ?? 0, tier = KARMA_TIERS.filter((k) => karma >= k).length; // 0 = none yet, 1..4
   return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM, blessFreeLeft, blessed: q.blessedByMe.all(w.id).map((r) => r.stone_id),
-    karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0, seed: seedState(w, now), seedSlot: w.id, seedsUnlocked: unlockedSeeds(karma) };
+    karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0, seed: seedState(w, now), seedSlot: w.id, seedsUnlocked: unlockedSeeds(karma),
+    invite: inviteCode(w), invites: w.invites_n ?? 0, invited: !!w.invited_by && !w.invite_paid_at, inviteReward: INVITE_REWARD };
 }
 /** Blessings on this wallet's stones since it last asked, then mark them seen. */
 export function newBlessings(w, now = Date.now()) {
@@ -254,8 +295,9 @@ export function addStone(wallet, { name, wish, sealed, private: priv }, now = Da
   if (seal && q.spendCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
   const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, priv ? 1 : 0, now);
   plantSeed(wallet.id, cleanName, now); if (cleanName) q.seedName.run(cleanName, wallet.id);
+  const invite = fresh.placed === 0 ? rewardInvite(wallet.id, now) : null;
   checkFirmament(Number(r.lastInsertRowid), now);
-  return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
+  return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now), invite };
 }
 
 /** The owner decides, any time and for free, whether the text of their wish is shown. Sealed stones are already hidden. */
@@ -529,6 +571,7 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
   // funnel over the whole window: wallets created → placed a stone → paid
   const all = q.aCohort.all(fromMs, now + 1);
   const funnel = { wallets: all.length, activated: all.filter((r) => r.activated).length, paid: all.filter((r) => r.paid).length };
+  const inv = q.aInvited.get(fromMs); const invites = { invited: inv.invited ?? 0, rewarded: inv.rewarded ?? 0 }; // wallets that came through a friend's link, and how many stacked a first stone
   const totalSecs = series.reduce((a, r) => a + r.secs * r.visits, 0), totalVisits = sum("visits", series);
   // unit economics: what a wisher, a buyer and a stone are worth (web pack revenue only; on-chain revenue is read from the chain by the pages)
   const tot = metrics(now).totals, revenue = sum("revenue", series), wishers = q.aWishers.get(fromMs).n, ordersPaid = sum("ordersPaid", series), paidStones = sum("paidStones", series);
@@ -538,7 +581,7 @@ export function analytics(days = 30, admin = false, now = Date.now()) {
     lifetime: { wishers: tot.wallets, buyers: tot.buyers, revenue: tot.revenueUsd, arpu: per(tot.revenueUsd, tot.wallets), arppu: per(tot.revenueUsd, tot.buyers, 2) },
     split: { stakersBps: 5000, charityBps: DONATION.bps, supply: 1e9 } };
   const ab = KARMA_AB ? Object.fromEntries(q.abGroups.all(fromMs).map((r) => [r.grp === 0 ? "karmaOn" : "karmaOff", { wallets: r.wallets, activated: r.activated, stones: r.stones ?? 0, paid: r.paid }])) : null;
-  const v = { days, series, growth, retention, funnel, unit: admin ? unit : undefined, ab, karmaTotal: q.karmaTotal.get().n, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
+  const v = { days, series, growth, retention, funnel, invites, unit: admin ? unit : undefined, ab, karmaTotal: q.karmaTotal.get().n, avgSeconds: totalVisits ? Math.round(totalSecs / totalVisits) : 0, totals: metrics(now).totals, towerStones: count(), stoneCm: STONE_CM, at: now, sources: admin ? q.aSources.all(from) : undefined };
   analyticsCache.set(key, { at: now, v });
   return v;
 }
@@ -611,7 +654,8 @@ export const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/me") {
       const [w, setCookie] = wallet(req);
-      return json(res, 200, { wallet: walletState(w), newBlessings: newBlessings(w), eventReward: pendingEventReward(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
+      const newInvites = (w.invites_n ?? 0) - (w.seen_invites ?? 0); if (newInvites > 0) q.seenInvites.run(w.id);
+      return json(res, 200, { wallet: walletState(w), newBlessings: newBlessings(w), newInvites, eventReward: pendingEventReward(w), pack: PACK, providers: enabledProviders(), chain: chainPublic(), ...stats() }, setCookie ? { "Set-Cookie": setCookie } : {});
     }
 
     // ---- on-chain stacking: register the wish text (only its hash goes on-chain), get a free-stone voucher
@@ -659,6 +703,14 @@ export const server = http.createServer(async (req, res) => {
       const [w, setCookie] = wallet(req);
       try { return json(res, 200, bless(w, mb[1]), setCookie ? { "Set-Cookie": setCookie } : {}); }
       catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w), pack: PACK, providers: enabledProviders() }, setCookie ? { "Set-Cookie": setCookie } : {}); }
+    }
+
+    // Arrived through a friend's link: POST /api/invite { code }
+    if (req.method === "POST" && url.pathname === "/api/invite") {
+      if (limited(ip, "invite", 20)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req); const b = await readBody(req);
+      const ok = claimInvite(w, b.code);
+      return json(res, 200, { ...ok, wallet: walletState(q.walletById.get(w.id)) }, setCookie ? { "Set-Cookie": setCookie } : {});
     }
 
     // Show or hide the text of your own wish: POST /api/stones/<id>/visibility { private: true|false }

@@ -143,6 +143,22 @@ test("sealed wish: costs one extra stone, text hidden from everyone but the owne
   assert.equal(r2.wallet.credits, PACK.stones - 3);
 });
 
+test("invitations: a friend's first stone rewards both sides once, never yourself, capped per day", async () => {
+  const host = createWallet(), guest = createWallet(), t0 = 7_000_000;
+  const code = walletState(host, t0).invite; assert.match(code, /^[a-z2-9]{6}$/); assert.equal(walletState(host, t0).invite, code, "stable");
+  assert.equal(S.claimInvite(host, code).ok, false, "not yourself");
+  assert.equal(S.claimInvite(guest, "nope00").ok, false);
+  assert.equal(S.claimInvite(guest, code).ok, true); assert.equal(walletState(S.walletByToken(guest.token), t0).invited, true);
+  assert.equal(S.claimInvite(guest, walletState(createWallet(), t0).invite).ok, false, "first inviter wins");
+  const r = addStone(guest, { wish: "came through a friend" }, t0);
+  assert.deepEqual(r.invite, { inviter: host.id, credits: S.INVITE_REWARD });
+  assert.equal(r.wallet.credits, S.INVITE_REWARD, "guest got the gift on top of the free stone");
+  const h = walletState(S.walletByToken(host.token), t0); assert.equal(h.credits, S.INVITE_REWARD); assert.equal(h.invites, 1); assert.equal(h.karma, 1);
+  assert.equal(addStone(guest, { wish: "second stone" }, t0 + 86_400_000).invite, null, "only the first stone");
+  assert.equal(S.claimInvite(guest, code).ok, false, "too late after a stone");
+  const a = S.analytics(30, false, Date.now()); assert.ok(a.invites.invited >= 1 && a.invites.rewarded >= 1);
+});
+
 test("analytics: unit economics per wisher and per buyer", async () => {
   const w = createWallet(); const t0 = Date.now();
   addStone(w, { wish: "unit economics wish" }, t0);

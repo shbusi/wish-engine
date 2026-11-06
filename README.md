@@ -275,6 +275,15 @@ ffmpeg. Dropped stones exist only in the capture; nothing is written to the serv
 (`npm i -D playwright && npx playwright install chromium`). About 0.7 s per frame on a CPU renderer, so an 18 s
 clip takes 4–5 minutes; `--lang ko` for Korean HUD text.
 
+## Invitations
+
+Every wallet has a six-character invite code (`walletState.invite`). "Invite a friend" shares `/?i=<code>`, and the
+"Share link" of a stone carries the code too. A visitor who arrives through it before their first stone is attributed
+to the inviter (`POST /api/invite { code }`, first inviter wins, never yourself); when they stack their first stone,
+web2 or on-chain, both sides receive `INVITE_REWARD` stones (default 1) and the inviter +1 karma, capped at
+`INVITE_DAILY_CAP` (20) rewarded friends per inviter per day. The inviter is told on their next visit, and the
+analytics funnel shows how many new wallets came through invite links and how many of them stacked.
+
 ## Stream background: `?ambient=1`
 
 For streamers and OBS: `https://<site>/?ambient=1&ref=<creator>` shows only the tower (no panels, no buttons), rotates
