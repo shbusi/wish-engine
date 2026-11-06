@@ -60,20 +60,34 @@ try:
     status("setup", 2, "loading model")
     from huggingface_hub import login
     if os.environ.get("HF_TOKEN"): login(token=os.environ["HF_TOKEN"], add_to_git_credential=False)
-    from diffusers import FluxPipeline
+    from diffusers import FluxPipeline, StableDiffusionXLPipeline
     vram = torch.cuda.get_device_properties(0).total_memory / 2**30
-    model, steps, guidance = "black-forest-labs/FLUX.1-dev", 28, 3.5
-    try:
-        pipe = FluxPipeline.from_pretrained(model, torch_dtype=torch.bfloat16)
-    except Exception as e:
-        print("FLUX.1-dev unavailable (license not accepted?):", str(e)[:200])
-        model, steps, guidance = "black-forest-labs/FLUX.1-schnell", 4, 0.0
-        pipe = FluxPipeline.from_pretrained(model, torch_dtype=torch.bfloat16)
-    if vram < 40: pipe.enable_model_cpu_offload()
+    # Preference order. FLUX models are gated on Hugging Face: accept their license with the
+    # account behind HF_TOKEN and the next run upgrades itself. SDXL needs no acceptance.
+    CANDIDATES = [
+        ("black-forest-labs/FLUX.1-dev", FluxPipeline, dict(num_inference_steps=28, guidance_scale=3.5)),
+        ("black-forest-labs/FLUX.1-schnell", FluxPipeline, dict(num_inference_steps=4, guidance_scale=0.0)),
+        ("stabilityai/stable-diffusion-xl-base-1.0", StableDiffusionXLPipeline, dict(num_inference_steps=40, guidance_scale=6.5)),
+    ]
+    pipe = None
+    for model, cls, params in CANDIDATES:
+        try:
+            kw = dict(torch_dtype=torch.bfloat16) if cls is FluxPipeline else dict(torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
+            pipe = cls.from_pretrained(model, **kw); break
+        except Exception as e:
+            print(f"{model} unavailable:", str(e)[:160].replace(chr(10), " "))
+    if pipe is None: raise RuntimeError("no model could be loaded")
+    is_flux = isinstance(pipe, FluxPipeline)
+    if vram < 40 and is_flux: pipe.enable_model_cpu_offload()
     else: pipe.to("cuda")
     status("setup", 15, f"{model} on {vram:.0f}GB")
     gen = lambda seed: torch.Generator("cuda").manual_seed(seed)
     NEG_HINT = " No text, no watermark, no people, no logos."
+    NEG = "text, watermark, logo, people, person, hands, blurry, low quality, frame, border, vignette"
+    def run(prompt, width, height, seed):
+        if is_flux:
+            return pipe(prompt, width=width, height=height, generator=gen(seed), **params).images[0]
+        return pipe(prompt, negative_prompt=NEG, width=width, height=height, generator=gen(seed), **params).images[0]
 
     # ---------- stone albedo (two candidates) ----------
     stone_prompt = ("Seamless tileable texture of a smooth grey river stone surface, subtle warm brown mineral veins, "
@@ -81,7 +95,7 @@ try:
                     "no highlights, no edges, 8k PBR albedo material scan, uniform scale." + NEG_HINT)
     for i, seed in enumerate([11, 23]):
         status("stone", 20 + i * 20, f"albedo {i+1}/2")
-        img = pipe(stone_prompt, width=1024, height=1024, num_inference_steps=steps, guidance_scale=guidance, generator=gen(seed)).images[0]
+        img = run(stone_prompt, 1024, 1024, seed)
         img = seamless(img).resize((2048, 2048), Image.LANCZOS)
         upload(img, "stone_albedo.jpg" if i == 0 else "stone_albedo_alt.jpg")
         if i == 0:
@@ -94,7 +108,9 @@ try:
                   "to violet gradient, a low full moon near the left horizon with soft glow, thousands of stars, faint "
                   "milky way band, thin high clouds, distant dark ridgelines all around the horizon, ground is dark "
                   "mossy grass, no sun, photographic, HDR look." + NEG_HINT)
-    sky = pipe(sky_prompt, width=2048, height=1024, num_inference_steps=steps, guidance_scale=guidance, generator=gen(7)).images[0]
+    # SDXL is trained at ~1MP: render 1536x768 and upscale; FLUX handles 2048x1024 directly.
+    sky = run(sky_prompt, 2048 if is_flux else 1536, 1024 if is_flux else 768, 7)
+    if sky.width < 2048: sky = sky.resize((2048, 1024), Image.LANCZOS)
     upload(sky_seam(sky), "skybox.jpg", 90)
 
     status("done", 100, f"{model} · {len(FILES)} files")
