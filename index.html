@@ -328,15 +328,15 @@ const BANDS = [0, 8, 25, 80, 250, 400]; // meters where each band begins: meadow
 const col = (h) => new THREE.Color(h);
 const ENV = [ // one entry per band
   // even from the meadow, the waters above glimmer faintly at the zenith (water) and the dome carries a hint of their light (firm)
-  { top: col(0x04101c), mid: col(0x101436), bot: col(0x2a2036), fog: 0.028, fogC: col(0x0c0b16), ground: 1, clouds: 0, fire: 1, lantern: 1, stars: 1, moon: 1, aurora: 0, hemi: 0.9, water: 0.14, firm: 0.18 },
-  { top: col(0x05141f), mid: col(0x0d1234), bot: col(0x3a2c4a), fog: 0.012, fogC: col(0x1a1830), ground: 0.75, clouds: 0.25, fire: 0, lantern: 0.6, stars: 1.2, moon: 1.1, aurora: 0, hemi: 0.8, water: 0.22, firm: 0.3 },
-  { top: col(0x061a26), mid: col(0x0a1030), bot: col(0x6a5a8a), fog: 0.004, fogC: col(0x2a2a48), ground: 0, clouds: 1, fire: 0, lantern: 0.3, stars: 1.5, moon: 1.25, aurora: 0.15, hemi: 0.7, water: 0.35, firm: 0.5 },
+  { top: col(0x04101c), mid: col(0x101436), bot: col(0x2a2036), fog: 0.028, fogC: col(0x0c0b16), ground: 1, clouds: 0, fire: 1, lantern: 1, stars: 1, moon: 1, aurora: 0, hemi: 0.9, water: 0.14, firm: 0.18, caustic: 0, mist: 0.55, shafts: 0 },
+  { top: col(0x05141f), mid: col(0x0d1234), bot: col(0x3a2c4a), fog: 0.012, fogC: col(0x1a1830), ground: 0.75, clouds: 0.25, fire: 0, lantern: 0.6, stars: 1.2, moon: 1.1, aurora: 0, hemi: 0.8, water: 0.22, firm: 0.3, caustic: 0, mist: 0.3, shafts: 0 },
+  { top: col(0x061a26), mid: col(0x0a1030), bot: col(0x6a5a8a), fog: 0.004, fogC: col(0x2a2a48), ground: 0, clouds: 1, fire: 0, lantern: 0.3, stars: 1.5, moon: 1.25, aurora: 0.15, hemi: 0.7, water: 0.35, firm: 0.5, caustic: 0.1, mist: 0, shafts: 0 },
   // edge of the sky: the dome turns glassy teal, the lights set in it grow sharp, the waters above show through
-  { top: col(0x0a3a48), mid: col(0x072438), bot: col(0x1a2a4a), fog: 0.0015, fogC: col(0x0a1e2a), ground: 0, clouds: 0.4, fire: 0, lantern: 0.15, stars: 2.2, moon: 1.3, aurora: 0.8, hemi: 0.6, water: 0.6, firm: 0.8 },
+  { top: col(0x0a3a48), mid: col(0x072438), bot: col(0x1a2a4a), fog: 0.0015, fogC: col(0x0a1e2a), ground: 0, clouds: 0.4, fire: 0, lantern: 0.15, stars: 2.2, moon: 1.3, aurora: 0.8, hemi: 0.6, water: 0.6, firm: 0.8, caustic: 0.45, mist: 0, shafts: 0.15 },
   // the firmament: a ceiling of water overhead, caustic light, drops falling past the stones
-  { top: col(0x2a8a9a), mid: col(0x0e4a60), bot: col(0x08263a), fog: 0.0008, fogC: col(0x08303c), ground: 0, clouds: 0.1, fire: 0, lantern: 0.1, stars: 2.6, moon: 1.4, aurora: 0.25, hemi: 0.75, water: 1, firm: 1 },
+  { top: col(0x2a8a9a), mid: col(0x0e4a60), bot: col(0x08263a), fog: 0.0008, fogC: col(0x08303c), ground: 0, clouds: 0.1, fire: 0, lantern: 0.1, stars: 2.6, moon: 1.4, aurora: 0.25, hemi: 0.75, water: 1, firm: 1, caustic: 1, mist: 0, shafts: 0.45 },
   // the waters above: the tower climbs inside the upper sea — thick teal fog, caustic light everywhere, no ceiling, bubbles rising
-  { top: col(0x0a6a7a), mid: col(0x0a4a60), bot: col(0x083040), fog: 0.02, fogC: col(0x0b4454), ground: 0, clouds: 0, fire: 0, lantern: 0.05, stars: 0.6, moon: 0.8, aurora: 0, hemi: 1.1, water: 0, firm: 1.6 },
+  { top: col(0x0a6a7a), mid: col(0x0a4a60), bot: col(0x083040), fog: 0.02, fogC: col(0x0b4454), ground: 0, clouds: 0, fire: 0, lantern: 0.05, stars: 0.6, moon: 0.8, aurora: 0, hemi: 1.1, water: 0, firm: 1.6, caustic: 1.3, mist: 0, shafts: 1 },
 ];
 const smooth = (t) => t * t * (3 - 2 * t);
 function envAt(altM) {
@@ -346,7 +346,7 @@ function envAt(altM) {
   const t = i >= ENV.length - 1 ? 0 : smooth(Math.min(1, Math.max(0, (altM - BANDS[i]) / span)));
   const L = (k) => a[k] + (b[k] - a[k]) * t;
   const C = (k) => a[k].clone().lerp(b[k], t);
-  return { band: i, t, top: C("top"), mid: C("mid"), bot: C("bot"), fogC: C("fogC"), fog: L("fog"), ground: L("ground"), clouds: L("clouds"), fire: L("fire"), lantern: L("lantern"), stars: L("stars"), moon: L("moon"), firm: L("firm"), aurora: L("aurora"), hemi: L("hemi"), water: L("water") };
+  return { band: i, t, top: C("top"), mid: C("mid"), bot: C("bot"), fogC: C("fogC"), fog: L("fog"), ground: L("ground"), clouds: L("clouds"), fire: L("fire"), lantern: L("lantern"), stars: L("stars"), moon: L("moon"), firm: L("firm"), caustic: L("caustic"), mist: L("mist"), shafts: L("shafts"), aurora: L("aurora"), hemi: L("hemi"), water: L("water") };
 }
 // cloud sea: a wide plane below the tower with drifting noise, visible from "above the trees" upward
 const cloudSea = (() => {
@@ -401,6 +401,23 @@ const pillar = (() => {
     fragmentShader: `uniform float op, time; varying vec2 vUv; void main(){ float v = smoothstep(0., .25, vUv.y) * smoothstep(1., .6, vUv.y); float r = .5 + .5 * sin(vUv.x * 31.4 + time * 2.) * sin(vUv.y * 20. - time * 3.); gl_FragColor = vec4(vec3(.55, .9, 1.) , (0.18 + 0.25 * r) * v * op); }` });
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 2.2, 1, 32, 1, true), m); mesh.visible = false; scene.add(mesh); return mesh;
 })();
+// low ground mist in the meadow bands, and light shafts falling through the upper waters
+const mist = (() => {
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { time: { value: 0 }, op: { value: 0 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `uniform float time, op; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+      void main(){ vec2 p = vUv * 9. + vec2(time * .02, time * .013); float v = n(p) * .55 + n(p * 2.3 + 7.) * .3 + n(p * 5.1 + 3.) * .15; float d = distance(vUv, vec2(.5)); float edge = 1. - smoothstep(.15, .5, d); float a = smoothstep(.35, .8, v) * edge * op * .55; gl_FragColor = vec4(vec3(.62, .66, .72), a); }` });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), m); mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.35; mesh.renderOrder = 2; scene.add(mesh); return mesh;
+})();
+const shafts = (() => {
+  const grp = new THREE.Group(); const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { time: { value: 0 }, op: { value: 0 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `uniform float time, op; varying vec2 vUv; void main(){ float x = abs(vUv.x - .5) * 2.; float beam = pow(1. - x, 2.5); float flick = .75 + .25 * sin(time * .7 + vUv.x * 9.); float v = smoothstep(0., .3, vUv.y) * smoothstep(1., .5, vUv.y); gl_FragColor = vec4(vec3(.5, .85, 1.), beam * v * flick * op * .35); }` });
+  for (let i = 0; i < 6; i++) { const w = 1.2 + (i % 3) * 0.8, mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, 60), m); mesh.position.set(Math.cos(i * 1.05) * (4 + i), 20, Math.sin(i * 1.05) * (4 + i)); mesh.rotation.y = i * 1.05 + 0.4; mesh.rotation.z = (i % 2 ? 1 : -1) * 0.12; grp.add(mesh); }
+  scene.add(grp); return { grp, m };
+})();
 let ceremony = null; // { t, total, wallets, reward, stoneId }
 /** The touch: the ceiling surges, a pillar of light descends onto the keystone, every stone lights up from the bottom, drops pour, a title appears. ~12 s, virtual-time safe. */
 function startCeremony(e) {
@@ -436,7 +453,9 @@ function applyEnv(altM) {
   aurora.material.uniforms.op.value = e.aurora; aurora.visible = e.aurora > 0.01;
   scene.getObjectByName("stars").material.uniforms.mul.value = e.stars;
   waterCeiling.material.uniforms.op.value = e.water; waterCeiling.visible = e.water > 0.01;
-  skyMat.uniforms.firm.value = e.firm;
+  skyMat.uniforms.firm.value = e.firm; causticU.mul.value = e.caustic;
+  mist.material.uniforms.op.value = e.mist; mist.visible = e.mist > 0.01;
+  shafts.m.uniforms.op.value = e.shafts; shafts.grp.visible = e.shafts > 0.01; shafts.grp.position.y = towerTop;
   // the ceiling hangs high above a low tower and comes down to just overhead by the firmament band
   const prog = Math.min(1, altM / BANDS[4]); waterCeiling.position.y = towerTop + 70 - 62 * prog * prog;
   const dropOp = Math.max(0, (e.water - 0.5) * 2); drops.material.uniforms.op.value = dropOp; drops.visible = dropOp > 0.01;
@@ -477,26 +496,46 @@ let stoneCm = 9, today = 0, me = null, pack = null, providers = [], chainCfg = n
 const MILESTONES = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 75, 100, 150, 200, 300, 500, 1000, 2000, 5000, 10000];
 const nextMilestone = (m) => MILESTONES.find((x) => x > m) ?? Math.ceil(m / 10000 + 1) * 10000;
 let stoneGeoBase = null;     // generated GLB geometry when available
+// contact shadows: a radial-gradient disc shared by every stone
+const contactGeo = new THREE.CircleGeometry(1, 40);
+const contactMat = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); const gr = x.createRadialGradient(64, 64, 8, 64, 64, 64); gr.addColorStop(0, "rgba(0,0,0,0.78)"); gr.addColorStop(0.55, "rgba(0,0,0,0.42)"); gr.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+  const tx = new THREE.CanvasTexture(c); return new THREE.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, fog: true }); })();
+// caustics from the waters above, injected into every stone material: light ripples on upward-facing surfaces in the top bands
+const causticU = { mul: { value: 0 }, time: { value: 0 } };
+function withCaustics(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.causticMul = causticU.mul; sh.uniforms.causticTime = causticU.time;
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWp; varying vec3 vWn;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.)).xyz; vWn = normalize(mat3(modelMatrix) * objectNormal);");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float causticMul, causticTime; varying vec3 vWp; varying vec3 vWn;\nfloat cst(vec2 p, float t){ float v = 0.; for (int i = 0; i < 3; i++){ float fi = float(i); vec2 q = p * (1.6 + fi * 1.3) + vec2(sin(t * (.3 + fi * .1) + fi), cos(t * (.25 + fi * .08) - fi)); v += abs(sin(q.x * 2.1 + sin(q.y * 1.7 + t * .4)) * sin(q.y * 2.3 - t * .3)); } return pow(v / 3., 3.); }")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.35, 0.8, 0.9) * cst(vWp.xz * 0.9, causticTime) * max(vWn.y, 0.) * causticMul * 0.9;");
+  };
+  mat.customProgramCacheKey = () => "caustic";
+  return mat;
+}
 const seeded = (id) => { let s = (id * 9301 + 49297) % 233280; return () => (s = (s * 9301 + 49297) % 233280) / 233280; };
 
+/** Three families of stone — slab, river stone, chunk — each with its own noise, rim and a little asymmetry, so no two look alike. */
 function stoneGeometry(id, s) {
   const r = seeded(id * 7 + 3);
-  const rx = s * (0.95 + r() * 0.25), ry = s * (0.22 + r() * 0.1), rz = s * (0.74 + r() * 0.22);
-  let g;
-  if (stoneGeoBase) { g = stoneGeoBase.clone(); }
-  else {
-    g = new THREE.IcosahedronGeometry(1, isMobile ? 4 : 5);
-    const p = g.attributes.position, v = new THREE.Vector3(), off = r() * 100;
-    for (let i = 0; i < p.count; i++) {
-      v.fromBufferAttribute(p, i);
-      const n1 = noise.noise(v.x * 1.6 + off, v.y * 1.6, v.z * 1.6), n2 = noise.noise(v.x * 5 + off, v.y * 5, v.z * 5);
-      v.multiplyScalar(1 + n1 * 0.16 + n2 * 0.045);
-      v.y = Math.sign(v.y) * Math.pow(Math.abs(v.y), 0.72); // rounded rim, flat-ish top and bottom, like a river stone
-      p.setXYZ(i, v.x, v.y, v.z);
-    }
+  const fam = r(); // 0..1 → slab 35% · river 45% · chunk 20%
+  const kind = fam < 0.35 ? "slab" : fam < 0.8 ? "river" : "chunk";
+  const rx = s * (kind === "chunk" ? 0.8 + r() * 0.2 : 0.95 + r() * 0.3);
+  const ry = s * (kind === "slab" ? 0.17 + r() * 0.08 : kind === "river" ? 0.27 + r() * 0.13 : 0.4 + r() * 0.18);
+  const rz = s * (kind === "chunk" ? 0.72 + r() * 0.22 : 0.7 + r() * 0.26);
+  const rim = kind === "slab" ? 0.55 + r() * 0.15 : kind === "river" ? 0.68 + r() * 0.12 : 0.85 + r() * 0.15; // y exponent: low = flat top, high = rounder
+  const amp = kind === "chunk" ? 0.22 : 0.14, off = r() * 100, skew = (r() - .5) * 0.35, lean = (r() - .5) * 0.25;
+  const g = stoneGeoBase ? stoneGeoBase.clone() : new THREE.IcosahedronGeometry(1, isMobile ? 4 : 5);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const n1 = noise.noise(v.x * 1.6 + off, v.y * 1.6, v.z * 1.6), n2 = noise.noise(v.x * 5 + off, v.y * 5, v.z * 5 + off);
+    v.multiplyScalar(1 + n1 * amp + n2 * 0.05);
+    v.y = Math.sign(v.y) * Math.pow(Math.abs(v.y), rim);
+    v.x += v.y * lean; v.z *= 1 + skew * v.x * 0.5;                // a leaning, slightly pear-shaped silhouette
+    p.setXYZ(i, v.x, v.y, v.z);
   }
   g.scale(rx, ry, rz); g.computeVertexNormals();
-  return { g, rx, ry, rz };
+  return { g, rx, ry, rz, kind };
 }
 /** Carved-letter texture: a dark groove with a thin lit edge below it, like chisel work. */
 function engravingTexture(name, sealed, keystone) {
@@ -542,11 +581,19 @@ function buildStone(data, idx) {
   const r = seeded(data.id);
   const s = 1.45 - Math.max(0, idx) * 0.028 + (r() - .5) * 0.18;
   const { g, rx, ry, rz } = stoneGeometry(data.id, Math.max(0.55, s));
-  const mat = stoneMat.clone(); mat.color.setHSL(0.08 + r() * 0.04, 0.08 + r() * 0.1, 0.62 + r() * 0.16); mat.map = stoneTex;
+  const mat = stoneMat.clone(); mat.map = stoneTex; withCaustics(mat);
+  // palette: warm tan, cool grey-blue, dark basalt — and the lowest stones are a touch darker and wetter
+  const pal = r(); const low = Math.max(0, -idx) / VISIBLE;
+  if (pal < 0.55) mat.color.setHSL(0.07 + r() * 0.05, 0.1 + r() * 0.12, 0.6 + r() * 0.16 - low * 0.12);
+  else if (pal < 0.85) mat.color.setHSL(0.58 + r() * 0.06, 0.05 + r() * 0.08, 0.55 + r() * 0.14 - low * 0.12);
+  else mat.color.setHSL(0.08 + r() * 0.04, 0.05, 0.3 + r() * 0.1);
+  mat.roughness = 0.62 + r() * 0.3 - low * 0.12; mat.bumpScale = 0.35 + r() * 0.35;
   const mesh = new THREE.Mesh(g, mat); mesh.castShadow = mesh.receiveShadow = true;
-  mesh.rotation.y = r() * Math.PI * 2; mesh.rotation.z = (r() - .5) * 0.08; mesh.rotation.x = (r() - .5) * 0.06;
+  mesh.rotation.y = r() * Math.PI * 2; mesh.rotation.z = (r() - .5) * 0.13; mesh.rotation.x = (r() - .5) * 0.1;
   mesh.userData.id = data.id;
-  const st = { data, mesh, rx, ry, rz, ox: (r() - .5) * 0.26, oz: (r() - .5) * 0.26, label: null };
+  // contact shadow: a soft dark disc at the stone's underside, resting on the stone below (or the ground)
+  const shadow = new THREE.Mesh(contactGeo, contactMat); shadow.scale.set(rx * 0.92, rz * 0.92, 1); shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 1; scene.add(shadow);
+  const st = { data, mesh, rx, ry, rz, ox: (r() - .5) * 0.34, oz: (r() - .5) * 0.34, label: null, shadow };
   scene.add(mesh);
   return st;
 }
@@ -558,6 +605,7 @@ let towerTop = 0.02;
 function place(st) {
   const y = towerTop + st.ry;
   st.targetY = y; st.mesh.position.set(st.ox, y, st.oz);
+  if (st.shadow) st.shadow.position.set(st.ox, y - st.ry + 0.015, st.oz);
   towerTop = y + st.ry - 0.05;
 }
 function lowestY() { return stones.length ? stones[0].mesh.position.y - stones[0].ry : 0; }
@@ -579,7 +627,7 @@ const hiddenPile = (() => { // the stones you can't see become the mound the tow
 })();
 
 function setStones(list, totalCount) {
-  for (const st of stones) { scene.remove(st.mesh); st.mesh.geometry.dispose(); if (st.label) scene.remove(st.label); }
+  for (const st of stones) { scene.remove(st.mesh); st.mesh.geometry.dispose(); if (st.label) scene.remove(st.label); if (st.shadow) scene.remove(st.shadow); }
   stones.length = 0; byId.clear();
   const vis = list.slice(-VISIBLE);
   towerTop = 0.02;
@@ -591,7 +639,7 @@ function addStone(d, animate) {
   if (byId.has(d.id) || d.id <= lastId) return;
   lastId = d.id; total = Math.max(total, d.id ? total + 1 : total);
   const st = buildStone(d, 0); place(st); stones.push(st); byId.set(d.id, st);
-  while (stones.length > VISIBLE) { const old = stones.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); if (old.label) scene.remove(old.label); byId.delete(old.data.id); }
+  while (stones.length > VISIBLE) { const old = stones.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); if (old.label) scene.remove(old.label); if (old.shadow) scene.remove(old.shadow); byId.delete(old.data.id); }
   hiddenPile.set(total - stones.length, lowestY());
   if (animate) { st.falling = true; st.vy = 0; st.mesh.position.y = st.targetY + 7; st.mesh.scale.set(1, 1, 1); } else engrave(st);
   updateHud(); addToFeed(d);
@@ -642,6 +690,7 @@ function tick() {
   const dt = VIDEO ? vdt : Math.min(clock.getDelta(), 0.05), time = VIDEO ? vnow / 1000 : clock.elapsedTime;
   // physics for falling stones
   for (const st of stones) {
+    if (st.shadow) { st.shadow.material = contactMat; st.shadow.visible = !st.falling || st.mesh.position.y - st.targetY < 1.5; }
     if (st.falling) {
       st.vy -= 22 * dt; st.mesh.position.y += st.vy * dt;
       if (st.mesh.position.y <= st.targetY) {
@@ -655,7 +704,7 @@ function tick() {
   }
   dust.tick(dt);
   fireflies.material.uniforms.time.value = time; fireflies.material.uniforms.mul.value = fireflyMul; scene.getObjectByName("stars").material.uniforms.time.value = time;
-  cloudSea.material.uniforms.time.value = time; aurora.material.uniforms.time.value = time; skyMat.uniforms.time.value = time; waterCeiling.material.uniforms.time.value = time; drops.material.uniforms.time.value = time;
+  cloudSea.material.uniforms.time.value = time; aurora.material.uniforms.time.value = time; skyMat.uniforms.time.value = time; causticU.time.value = time; mist.material.uniforms.time.value = time; shafts.m.uniforms.time.value = time; shafts.grp.rotation.y = time * 0.02; waterCeiling.material.uniforms.time.value = time; drops.material.uniforms.time.value = time;
   lantern.intensity = (86 + Math.sin(time * 9.3) * 5 + Math.sin(time * 23.7) * 3) * lanternMul;
   // altitude eases toward the real value so a new stone nudges the world rather than snapping it
   const targetAlt = altOverride ?? (total * stoneCm) / 100; altShown += (targetAlt - altShown) * (1 - Math.pow(0.02, dt)); applyEnv(altShown);

@@ -19,6 +19,14 @@ npm test
 
 ## What's in the scene
 
+Stones come in three families (slab, river stone, chunk), each with its own noise, rim and a slight lean, so no
+two look alike; colours mix warm tan, grey-blue and dark basalt, with the lowest stones darker and wetter, and
+roughness and bump vary per stone. Every stone has a soft contact shadow on the stone (or ground) beneath it,
+which is what stops the tower from floating. From the edge of the sky upward the waters above throw caustic
+light onto upward-facing surfaces (injected into the stone shader), the ground carries a low drifting mist in the
+meadow bands, and light shafts fall through the firmament and the waters above.
+
+
 - **Night sky** as a gradient dome with a moon and 2,200 twinkling stars; the sky is also the PBR environment light.
 - **Moonlight** (key, soft shadows), a **lantern** by the tower (warm point light, flickers), hemisphere fill, exponential fog.
 - **Stones**: procedural river stones (icosahedron + 3D noise, flattened top/bottom), PBR material with a procedural
