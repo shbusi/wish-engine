@@ -5,6 +5,7 @@ process.env.PAYMENT_PROVIDERS = "mock";
 process.env.RATE_PER_MIN = "100";
 process.env.ADMIN_TOKEN = "test-admin";
 const S = await import("./server.js");
+const Soil = await import("./soil.js");
 const { addStone, count, recent, after: afterId, createWallet, walletState, createOrder, settleOrder, server, STONE_CM, FREE_EVERY_MS, PACK, bless, stoneById, newBlessings, FREE_BLESS_PER_DAY } = S;
 
 test("free stone once per period, then credits, with validation", () => {
@@ -178,6 +179,35 @@ test("karma: one per stone placed and per blessing given; tiers from the thresho
   assert.throws(() => bless(a, s2.id, t0), /already_blessed/);
   assert.equal(walletState(S.walletByToken(a.token)).karma, 2, "no karma for a rejected blessing");
   assert.equal(walletState(S.walletByToken(a.token)).karmaUi, true, "everyone sees it unless KARMA_AB=1");
+});
+
+test("seed: planted with the first stone at a free spot, grows by soil speed, wilts by soil, waters once a day", () => {
+  const { waterSeed, SEED_STAGES, replantSeed } = S; const { soilAt } = Soil;
+  const w = createWallet(); const DAY = 86_400_000; const t0 = Date.now();
+  assert.equal(walletState(w).seed, null);
+  assert.throws(() => waterSeed(w, t0), /no_seed/);
+  addStone(w, { name: "Mira", wish: "grow" }, t0);
+  let sd = walletState(S.walletByToken(w.token), t0).seed;
+  assert.equal(sd.stage, 1, "sprout on planting day"); assert.equal(sd.canWater, false); assert.equal(sd.name, "Mira"); assert.equal(sd.kind, "wildflower"); assert.ok(Soil.inGarden(sd.x, sd.z));
+  assert.throws(() => waterSeed(w, t0 + 1000), /watered_today/);
+  // move it onto rocky ground (slow, never wilts) and onto river ground (fast, wilts after 2 days) to compare
+  const find = (soil) => { for (let a = 0; a < 6.28; a += 0.05) for (let r = 4; r < 11.9; r += 0.5) { const x = Math.cos(a) * r, z = Math.sin(a) * r; if (soilAt(x, z) === soil) return { x, z }; } throw new Error("no " + soil); };
+  const rock = find("rocky"); const r1 = replantSeed(w, { ...rock, kind: "wildflower" }, t0); assert.equal(r1.seed.soil, "rocky"); assert.equal(r1.seed.growth, 0.7, "rock is slow: the first watering is not yet a sprout");
+  for (let d = 1; d <= 6; d++) waterSeed(w, t0 + d * DAY);                                   // 7 waterings × 0.7 = 4.9 → stage 3
+  sd = walletState(S.walletByToken(w.token), t0 + 6 * DAY).seed; assert.equal(sd.waterings, 7); assert.equal(sd.stage, 3);
+  sd = walletState(S.walletByToken(w.token), t0 + 30 * DAY).seed; assert.equal(sd.stage, 3, "rock never wilts");
+  const river = find("river"); const r2 = replantSeed(w, { ...river, kind: "wildflower" }, t0 + 30 * DAY); assert.equal(r2.seed.soil, "river");
+  for (let d = 31; d <= 34; d++) waterSeed(w, t0 + d * DAY);                                 // 5 waterings × 1.4 = 7 → in bloom
+  sd = walletState(S.walletByToken(w.token), t0 + 34 * DAY).seed; assert.equal(sd.stage, 5, "river blooms fast");
+  sd = walletState(S.walletByToken(w.token), t0 + 39 * DAY).seed; assert.ok(sd.stage < 5, "river wilts after 2 missed days"); assert.equal(sd.thirstyDays, 4);
+  assert.equal(SEED_STAGES.length, 6);
+  // seeds unlock with karma; the lotus never opens on dry ground
+  assert.throws(() => replantSeed(w, { ...rock, kind: "lantern" }, t0 + 40 * DAY), /seed_locked/);
+  const r3 = replantSeed(w, { ...rock, kind: "lotus" }, t0 + 40 * DAY); assert.equal(r3.seed.blooms, false);
+  assert.throws(() => replantSeed(w, { x: 0, z: 1, kind: "wildflower" }), /bad_spot/);
+  const other = createWallet(); addStone(other, { wish: "mine too" }, t0 + 40 * DAY);
+  assert.throws(() => replantSeed(other, { ...rock, kind: "wildflower" }, t0 + 40 * DAY), /spot_taken/);
+  const g = S.seeds(10, t0 + 40 * DAY); assert.ok(g.some((p) => p.name === "Mira" && p.kind === "lotus" && p.soil === "rocky"));
 });
 
 after(() => server.close());

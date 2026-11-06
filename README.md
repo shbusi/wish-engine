@@ -139,6 +139,15 @@ and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes 
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
+**Seeds and the garden**: the first stone plants a seed at the foot of the tower; the 🌱 button descends to the
+garden. Water it once a day (+1 karma) and it grows through six stages (seed → in bloom at seven waterings); stay
+away and it wilts a stage per few days. Soils lie in patches (`soil.js`, shared by server and page): meadow
+(balanced, wilts after 3 days), riverbank (×1.4 speed, wilts after 2), rocky ground (×0.7, never wilts), moss
+hollow (wilts after 4, where strange seeds bloom). Seeds unlock with karma: wildflower (0), pine (3, evergreen,
+loves rock), lotus (10, opens only on river or moss), lantern tree (50, blooms as lights on moss or rock). Tap the
+ground to choose a spot (soil shown before you commit), pick a seed, plant; moving a plant starts it over.
+Everyone's plants are visible to everyone (`GET /api/seeds`); `POST /api/seed/plant`, `POST /api/seed/water`.
+
 **Karma**: one stone = one wish = one good deed. Every stone placed and every blessing given adds 1 karma to the
 wallet; tiers at 1 / 10 / 50 / 200 (pebble, cairn-keeper, mountain, firmament) are names shown in the HUD, with a
 toast on each step up. The HUD also shows what the tower has given so far (web pack revenue × the donation share;

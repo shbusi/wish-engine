@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { SOILS, SEEDS, STAGES as SEED_STAGE_TABLE, soilAt, inGarden, growthOf, keptWaterings, stageOf, unlockedSeeds, MIN_GAP, RADIUS_MIN, RADIUS_MAX } from "./soil.js";
 import { chain, chainPublic, signVoucher, preparePending, startIndexer } from "./chain-link.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -87,6 +88,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS events (type TEXT PRIMARY KEY, at INTEGER NO
 try { db.exec("ALTER TABLE stones ADD COLUMN keystone INTEGER NOT NULL DEFAULT 0"); } catch {}   // the stone that touched the firmament
 try { db.exec("ALTER TABLE wallets ADD COLUMN seen_event INTEGER NOT NULL DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE wallets ADD COLUMN karma INTEGER NOT NULL DEFAULT 0"); } catch {}      // good deeds: stones placed + blessings given
+// Seeds: planted at the foot of the tower with the first stone; watered once a day on a visit; wilts a stage after 3 missed days
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_day INTEGER"); } catch {}                       // day index the seed was planted (null = none)
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_water INTEGER NOT NULL DEFAULT 0"); } catch {}   // waterings so far
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_last INTEGER NOT NULL DEFAULT 0"); } catch {}    // day index of the last watering
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_name TEXT"); } catch {}                          // name on the plant (the wisher's last stone name)
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_x REAL NOT NULL DEFAULT 0"); } catch {}           // where it is planted (world units around the base)
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_z REAL NOT NULL DEFAULT 0"); } catch {}
+try { db.exec("ALTER TABLE wallets ADD COLUMN seed_kind TEXT NOT NULL DEFAULT 'wildflower'"); } catch {}
 const q = {
   insert: db.prepare("INSERT INTO stones (name, wish, wallet_id, paid, sealed, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
   spendCredit: db.prepare("UPDATE wallets SET credits = credits - 1 WHERE id = ? AND credits >= 1"),
@@ -116,6 +125,12 @@ const q = {
   mDays: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n, COUNT(DISTINCT wallet_id) AS w, SUM(paid) AS p FROM stones WHERE bot = 0 AND created_at > ? GROUP BY d ORDER BY d"),
   mTotals: db.prepare("SELECT COUNT(*) AS stones, COUNT(DISTINCT wallet_id) AS wallets, SUM(paid) AS paid, SUM(sealed) AS sealed, SUM(CASE WHEN chain_id IS NOT NULL THEN 1 ELSE 0 END) AS onchain, SUM(blessings) AS blessings FROM stones WHERE bot = 0"),
   mReturning: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE placed >= 2"),
+  seedPlant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_name = ?, seed_x = ?, seed_z = ?, seed_kind = ? WHERE id = ? AND seed_day IS NULL"),
+  seedReplant: db.prepare("UPDATE wallets SET seed_day = ?, seed_water = 1, seed_last = ?, seed_x = ?, seed_z = ?, seed_kind = ? WHERE id = ?"),
+  seedSpots: db.prepare("SELECT seed_x AS x, seed_z AS z FROM wallets WHERE seed_day IS NOT NULL AND id != ?"),
+  seedWater: db.prepare("UPDATE wallets SET seed_water = ?, seed_last = ? WHERE id = ? AND seed_day IS NOT NULL AND seed_last < ?"),
+  seedName: db.prepare("UPDATE wallets SET seed_name = ? WHERE id = ?"),
+  seeds: db.prepare("SELECT id, seed_day, seed_water, seed_last, seed_name, seed_x, seed_z, seed_kind FROM wallets WHERE seed_day IS NOT NULL ORDER BY seed_last DESC LIMIT ?"),
   mBuyers: db.prepare("SELECT COUNT(DISTINCT wallet_id) AS n, COALESCE(SUM(CAST(usd AS REAL)), 0) AS usd FROM orders WHERE status = 'PAID'"),
   // analytics
   visitPut: db.prepare("INSERT OR IGNORE INTO visits (id, wallet_id, day, source, path, lang, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
@@ -172,7 +187,7 @@ export function addChainStone({ tokenId, name, wishHash, free, at }) {
   const r = q.insertChain.run((p?.name ?? name ?? "").slice(0, 20) || null, wish, p?.wallet_id ?? null, free ? 0 : 1, tokenId, p ? p.sealed : 1, at ?? Date.now());
   if (p) q.pendingDel.run(wishHash);
   if (r.changes === 0) return null;
-  if (p?.wallet_id) q.addKarma.run(1, p.wallet_id);
+  if (p?.wallet_id) { q.addKarma.run(1, p.wallet_id); plantSeed(p.wallet_id, p.name, at ?? Date.now()); }
   const stone = pub(q.one.get(Number(r.lastInsertRowid)));
   broadcast({ type: "stone", stone, ...stats() });
   checkFirmament(stone.id);
@@ -202,7 +217,7 @@ export function walletState(w, now = Date.now()) {
   const blessFreeLeft = w.bless_day === dayOf(now) ? Math.max(0, FREE_BLESS_PER_DAY - w.bless_n) : FREE_BLESS_PER_DAY;
   const karma = w.karma ?? 0, tier = KARMA_TIERS.filter((k) => karma >= k).length; // 0 = none yet, 1..4
   return { credits: w.credits, placed: w.placed, freeNow: w.free_at <= now, nextFreeAt: w.free_at > now ? w.free_at : null, liftedCm: w.placed * STONE_CM, blessFreeLeft, blessed: q.blessedByMe.all(w.id).map((r) => r.stone_id),
-    karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0 };
+    karma, tier, nextTier: KARMA_TIERS.find((k) => k > karma) ?? null, karmaUi: !KARMA_AB || w.id % 2 === 0, seed: seedState(w, now), seedSlot: w.id, seedsUnlocked: unlockedSeeds(karma) };
 }
 /** Blessings on this wallet's stones since it last asked, then mark them seen. */
 export function newBlessings(w, now = Date.now()) {
@@ -229,9 +244,54 @@ export function addStone(wallet, { name, wish, sealed }, now = Date.now()) {
   }
   if (seal && q.spendCredit.run(wallet.id).changes === 0) throw Object.assign(new Error("need_credits"), { status: 402 });
   const r = q.insert.run(cleanName || null, cleanWish, wallet.id, paid, seal, now);
+  plantSeed(wallet.id, cleanName, now); if (cleanName) q.seedName.run(cleanName, wallet.id);
   checkFirmament(Number(r.lastInsertRowid), now);
   return { stone: pub(q.one.get(Number(r.lastInsertRowid)), wallet.id), wallet: walletState(q.walletById.get(wallet.id), now) };
 }
+
+// ---------- seeds ----------
+export const SEED_STAGES = SEED_STAGE_TABLE;
+const seedRow = (w) => ({ waterings: w.seed_water, lastDay: w.seed_last, soil: soilAt(w.seed_x, w.seed_z) });
+export function seedState(w, now = Date.now()) {
+  if (w.seed_day == null) return null;
+  const today = dayOf(now), soil = soilAt(w.seed_x, w.seed_z), growth = growthOf(seedRow(w), today), stage = stageOf(growth, w.seed_kind, soil);
+  const next = SEED_STAGES[stage + 1] ? Math.max(1, Math.ceil((SEED_STAGES[stage + 1] - growth) / SOILS[soil].speed)) : null;
+  return { stage, growth: Math.round(growth * 10) / 10, waterings: w.seed_water, plantedDay: w.seed_day, days: today - w.seed_day, canWater: w.seed_last < today, thirstyDays: Math.max(0, today - w.seed_last - 1),
+    name: w.seed_name, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil, blooms: SEEDS[w.seed_kind]?.bloomsOn.includes(soil) ?? true, next };
+}
+/** A free spot for an automatic planting (first stone): a golden-angle spiral, skipping taken spots. */
+function autoSpot(walletId) {
+  const taken = q.seedSpots.all(walletId);
+  for (let i = 0; i < 400; i++) { const k = walletId + i * 37, a = k * 2.39996, r = RADIUS_MIN + 1 + ((k * 0.618) % 1) * (RADIUS_MAX - RADIUS_MIN - 2); const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (!taken.some((t) => Math.hypot(t.x - x, t.z - z) < MIN_GAP)) return { x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 }; }
+  return { x: 0, z: RADIUS_MIN + 1 };
+}
+/** Plant the seed with the first stone (idempotent): a wildflower at a free spot. The wisher can move it later. */
+export function plantSeed(walletId, name, now = Date.now()) { const w = q.walletById.get(walletId); if (!w || w.seed_day != null) return; const sp = autoSpot(walletId); q.seedPlant.run(dayOf(now), dayOf(now), name || null, sp.x, sp.z, "wildflower", walletId); }
+/** Choose where and what: replants (growth starts over at the first watering). Throws 400 on a bad spot or a locked seed. */
+export function replantSeed(wallet, { x, z, kind }, now = Date.now()) {
+  const w = q.walletById.get(wallet.id); x = Number(x); z = Number(z); kind = String(kind ?? "wildflower");
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !inGarden(x, z)) throw Object.assign(new Error("bad_spot"), { status: 400 });
+  if (!SEEDS[kind]) throw Object.assign(new Error("bad_seed"), { status: 400 });
+  if (!unlockedSeeds(w.karma ?? 0).includes(kind)) throw Object.assign(new Error("seed_locked"), { status: 403 });
+  if (q.seedSpots.all(w.id).some((t) => Math.hypot(t.x - x, t.z - z) < MIN_GAP)) throw Object.assign(new Error("spot_taken"), { status: 409 });
+  if (w.seed_day == null && w.placed < 1) throw Object.assign(new Error("no_stone"), { status: 402 });
+  q.seedReplant.run(dayOf(now), dayOf(now), Math.round(x * 100) / 100, Math.round(z * 100) / 100, kind, w.id);
+  const fresh = q.walletById.get(w.id); return { seed: seedState(fresh, now), wallet: walletState(fresh, now) };
+}
+/** Water once a day: +1 watering, +1 karma. Throws 409 if already watered today, 404 without a seed. */
+export function waterSeed(wallet, now = Date.now()) {
+  const w = q.walletById.get(wallet.id); if (w.seed_day == null) throw Object.assign(new Error("no_seed"), { status: 404 });
+  const today = dayOf(now);
+  // wilting is folded back into the stored waterings so a recovered plant resumes from where it wilted to
+  const kept = keptWaterings(seedRow(w), today);
+  if (q.seedWater.run(kept + 1, today, w.id, today).changes === 0) throw Object.assign(new Error("watered_today"), { status: 409 });
+  q.addKarma.run(1, w.id);
+  const fresh = q.walletById.get(w.id);
+  return { seed: seedState(fresh, now), wallet: walletState(fresh, now) };
+}
+/** The garden: everyone's plants, newest-watered first, public shape (slot = a stable number, never the wallet token). */
+export const seeds = (n = 60, now = Date.now()) => q.seeds.all(Math.min(300, Math.max(1, n))).map((w) => { const st = seedState(w, now); return { slot: w.id, stage: st.stage, days: st.days, name: w.seed_name, thirsty: st.thirstyDays >= 1, x: w.seed_x, z: w.seed_z, kind: w.seed_kind, soil: st.soil }; });
 
 /** The moment the tower reaches the firmament: once, ever. Rewards everyone who has stacked, marks the keystone. */
 export const firmamentStones = () => Math.ceil(FIRMAMENT_M * 100 / STONE_CM);
@@ -467,6 +527,19 @@ export const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(page("analytics.html"));
     }
+    if (req.method === "GET" && url.pathname === "/api/seeds") return json(res, 200, { seeds: seeds(Number(url.searchParams.get("n") ?? 60)), stages: SEED_STAGES });
+    if (req.method === "POST" && url.pathname === "/api/seed/plant") {
+      if (limited(ip, "plant", 10)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      try { return json(res, 200, replantSeed(w, await readBody(req)), setCookie ? { "Set-Cookie": setCookie } : {}); }
+      catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w) }, setCookie ? { "Set-Cookie": setCookie } : {}); }
+    }
+    if (req.method === "POST" && url.pathname === "/api/seed/water") {
+      if (limited(ip, "water", 10)) return json(res, 429, { error: "rate_limited" });
+      const [w, setCookie] = wallet(req);
+      try { return json(res, 200, waterSeed(w), setCookie ? { "Set-Cookie": setCookie } : {}); }
+      catch (e) { return json(res, e.status ?? 400, { error: e.message, wallet: walletState(w) }, setCookie ? { "Set-Cookie": setCookie } : {}); }
+    }
     if (req.method === "POST" && url.pathname === "/api/visit") {
       const [w, setCookie] = wallet(req);
       let body = {}; try { body = await readBody(req); } catch {}
@@ -484,7 +557,7 @@ export const server = http.createServer(async (req, res) => {
       return res.end([cols.join(","), ...a.series.map((r) => cols.map((c) => r[c]).join(","))].join("\n"));
     }
     if (req.method === "GET" && url.pathname === "/api/metrics") return json(res, 200, { ...metrics(), chain: chainPublic() }, { "Cache-Control": "public, max-age=60" });
-    if (url.pathname === "/wallet.js" || url.pathname === "/i18n.js") {
+    if (url.pathname === "/wallet.js" || url.pathname === "/i18n.js" || url.pathname === "/soil.js") {
       res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-cache" });
       return res.end(page(url.pathname.slice(1)));
     }
