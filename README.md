@@ -146,28 +146,6 @@ and every page reads the deployed symbol, so nothing is hardcoded. Mainnet goes 
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
-**Seeds and the garden, on real data** (`agri.js` → `soil.js`, shared by server and page): the first stone plants a
-wildflower at the foot of the tower; the 🌱 button descends to the garden. The four ground patches are unchanged,
-but each now carries a real soil profile from ISRIC SoilGrids (0–5 cm pH, clay, sand, organic carbon, field
-capacity, WRB class at a reference point: Korean uplands, Seoraksan valley floor, an Alpine slope, Hallasan).
-The four seeds are real species with their USDA PLANTS characteristics: black-eyed Susan (*Rudbeckia hirta*),
-eastern white pine (*Pinus strobus*, needs cold stratification), American lotus (*Nelumbo lutea*, blooms only on
-wet ground) and witch-hazel (*Hamamelis virginiana*, blooms in fall); pH range, texture adaptation, drought and
-anaerobic tolerance, moisture use, minimum temperature, growth rate and bloom period all come from that table.
-Weather is deterministic per day from KMA 1991–2020 climate normals (central Korea), with one real day as one
-garden week, so a year of seasons passes in 52 days. The plant is simulated day by day: a water balance (rain,
-evapotranspiration by temperature and the species' moisture use, your watering, the soil's field capacity and
-wetness), germination (moist, mild, and a cold spell first for stratified seeds), drought that worsens every day it
-lasts, frost on seedlings, heat, waterlogging, pH and texture misfit, winter dormancy, bloom season — and death.
-Neglect kills: a wildflower watered only at planting dies of drought in about a month of spring. Actions: water
-(once a day, +1 karma) and mulch (five days: shields seedlings from frost, halves evaporation). The panel shows
-today's and tomorrow's weather, health and soil water, and plain-language warnings ("frost tomorrow night: mulch
-it"). Dead plants stay as a dry stalk until replanted. Endpoints: `GET /api/seeds`, `GET /api/weather`,
-`POST /api/seed/plant|water|mulch`. The garden is flat and wide (radius 26 around the base, two brooks); in the
-garden view you wander it with a two-finger drag / right-drag or WASD and the arrow keys, clamped to its edge. There
-is no painted soil map: the spot marker and a faint ring under each plant take the soil's colour instead (green
-meadow, blue brook, sand rocky, dark-green moss). A live weather provider can replace the simulation when `api.open-meteo.com`
-is reachable. Sources are listed in `agri.js`.
 
 **Karma**: one stone = one wish = one good deed. Every stone placed and every blessing given adds 1 karma to the
 wallet; tiers at 1 / 10 / 50 / 200 (pebble, cairn-keeper, mountain, firmament) are names shown in the HUD, with a
@@ -286,7 +264,7 @@ background picks its angle (`?ambient=1&view=low`).
 **Fly up.** The 🎈 button opens a ladder of the six bands; choosing one above the tower's real height rides the
 world up to it (sky, fog, clouds, moon and sun, the waters above) while the HUD keeps the real height and a
 "Preview" line brings you back down. `?fly=<band index>` opens there, e.g. `?ambient=1&fly=2` for a stream
-background above the clouds. The garden view and the ceremony are unaffected.
+background above the clouds. The ceremony is unaffected.
 
 **Blessing marks and the day's top wishes.** A stone with `BLESS_MARK` (5) or more blessings carries a small "✦ N"
 light on the tower, always visible, so the most blessed wishes can be found without tapping. The Recent wishes panel
@@ -323,8 +301,8 @@ Wikimedia throttles; `node tools/music.mjs` does the same by hand, `MUSIC_AUTOFE
 lists what is present; `/music/<file>` streams it with Range support (iOS needs it).
 
 **Nameplates.** Every named stone carries a small brass plate with its name on its outer edge, always turned to the
-camera, so names read at a glance without tapping; the engraving stays as the stone's own mark. Plates hide in the
-garden, from straight above, and when the camera is far away.
+camera, so names read at a glance without tapping; the engraving stays as the stone's own mark. Plates hide
+from straight above and when the camera is far away.
 
 ## Stream background: `?ambient=1`
 
@@ -336,7 +314,17 @@ brought (the basis for a revenue share rather than a flat fee).
 
 ## Virtual early users (seeding)
 
-An empty tower is the worst first impression. `tools/seed-users.mjs` creates virtual early users:
+An empty tower is the worst first impression. Two tools, sharing one bank of names, wishes and a time-of-day curve
+(`seed-bank.js`):
+
+**Built into the server:** `SEED_PER_HOUR=8` makes the server itself stack a virtual visitor's stone at random moments,
+about eight an hour (exponential gaps of a few minutes, more in the Asian and American evenings, never under 20 s),
+each with a name (or none) and a wish from the bank in a weighted mix of languages. Every one is stored with `bot=1`,
+excluded from investor metrics, and lands live for everyone watching. About 190 stones a day at 8/h: above the clouds
+in two days, the firmament in about two weeks. Taper it as real users arrive. `DELETE /api/admin/stones?id=<id>` (with
+`ADMIN_TOKEN`) removes a stone, e.g. a test one; watchers see it vanish.
+
+**The tool**, for history and better wishes: `tools/seed-users.mjs` creates virtual early users:
 personas across ten languages (Korean and English first), 40% anonymous, each with a mood and a topic,
 and asks Claude for the kind of wish a real person types in two seconds. Without API credentials it
 uses a built-in bank of wishes instead.
