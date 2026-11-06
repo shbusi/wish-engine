@@ -667,7 +667,7 @@ async function loadMe() {
   me = r.wallet; pack = r.pack; providers = r.providers; stoneCm = r.stoneCm; today = r.today; chainCfg = r.chain;
   updateWallet();
   if (r.newBlessings) setTimeout(() => toast(t("blessedYou", r.newBlessings)), 1200);
-  if (chainCfg) { $("investLink").style.display = ""; $("investLink").href = L === "ko" ? "/invest?lang=ko" : "/invest"; }
+  if (chainCfg) { $("investLink").style.display = ""; $("investLink").href = L === "ko" ? "/investors?lang=ko" : "/investors"; }
   if (chainCfg) {
     $("chainRow").style.display = "";
     walletMod ??= await import("/wallet.js");

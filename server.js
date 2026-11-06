@@ -87,6 +87,11 @@ const q = {
   pendingDel: db.prepare("DELETE FROM pending_chain WHERE wish_hash = ?"),
   lastChain: db.prepare("SELECT MAX(chain_id) AS n FROM stones"),
   botCount: db.prepare("SELECT COUNT(*) AS n FROM stones WHERE bot = 1"),
+  // investor metrics: visitor stones only (seeded stones are excluded, never labelled)
+  mDays: db.prepare("SELECT (created_at / 86400000) AS d, COUNT(*) AS n, COUNT(DISTINCT wallet_id) AS w, SUM(paid) AS p FROM stones WHERE bot = 0 AND created_at > ? GROUP BY d ORDER BY d"),
+  mTotals: db.prepare("SELECT COUNT(*) AS stones, COUNT(DISTINCT wallet_id) AS wallets, SUM(paid) AS paid, SUM(sealed) AS sealed, SUM(CASE WHEN chain_id IS NOT NULL THEN 1 ELSE 0 END) AS onchain, SUM(blessings) AS blessings FROM stones WHERE bot = 0"),
+  mReturning: db.prepare("SELECT COUNT(*) AS n FROM wallets WHERE placed >= 2"),
+  mBuyers: db.prepare("SELECT COUNT(DISTINCT wallet_id) AS n, COALESCE(SUM(CAST(usd AS REAL)), 0) AS usd FROM orders WHERE status = 'PAID'"),
   recent: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones ORDER BY id DESC LIMIT ?"),
   after: db.prepare("SELECT id, name, wish, sealed, blessings, wallet_id, created_at FROM stones WHERE id > ? ORDER BY id ASC LIMIT ?"),
   count: db.prepare("SELECT COUNT(*) AS n FROM stones"),
@@ -312,6 +317,18 @@ function wallet(req) {
   const n = createWallet();
   return [n, cookieHeader(n.token)];
 }
+let metricsCache = { at: 0, v: null };
+/** Public growth metrics for the investor page. Cached a minute. */
+export function metrics(now = Date.now()) {
+  if (metricsCache.v && now - metricsCache.at < 60_000) return metricsCache.v;
+  const DAYS = 14, from = now - DAYS * 86_400_000, today = Math.floor(now / 86_400_000);
+  const rows = new Map(q.mDays.all(from).map((r) => [r.d, r]));
+  const days = Array.from({ length: DAYS }, (_, i) => { const d = today - DAYS + 1 + i; const r = rows.get(d); return { day: new Date(d * 86_400_000).toISOString().slice(0, 10), stones: r?.n ?? 0, wallets: r?.w ?? 0, paid: r?.p ?? 0 }; });
+  const t = q.mTotals.get(), buyers = q.mBuyers.get();
+  const v = { days, totals: { stones: t.stones, wallets: t.wallets, paid: t.paid ?? 0, sealed: t.sealed ?? 0, onchain: t.onchain ?? 0, blessings: t.blessings ?? 0, returning: q.mReturning.get().n, buyers: buyers.n, revenueUsd: Math.round(buyers.usd * 100) / 100 }, towerStones: count(), stoneCm: STONE_CM, at: now };
+  metricsCache = { at: now, v };
+  return v;
+}
 const stats = () => ({ total: count(), today: q.today.get(Date.now() - 86_400_000).n, stoneCm: STONE_CM });
 
 export const server = http.createServer(async (req, res) => {
@@ -328,6 +345,11 @@ export const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
       return res.end(page("invest.html"));
     }
+    if (req.method === "GET" && url.pathname === "/investors") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+      return res.end(page("investors.html"));
+    }
+    if (req.method === "GET" && url.pathname === "/api/metrics") return json(res, 200, { ...metrics(), chain: chainPublic() }, { "Cache-Control": "public, max-age=60" });
     if (url.pathname === "/wallet.js") {
       res.writeHead(200, { "Content-Type": MIME[".js"], "Cache-Control": "no-cache" });
       return res.end(page("wallet.js"));

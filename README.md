@@ -89,6 +89,13 @@ Two more things a stone credit buys, both paid by the person who wants them, nev
 - Design, allocation and sale parameters: `docs/TOKEN.md`. Deploy: `chain/scripts/deploy.js` (writes
   `chain/deployments/<network>.json`).
 
+**Investor overview `/investors`** (public, no wallet needed): the pitch in one screen with live numbers from
+`GET /api/metrics` (visitor stones per day for 14 days, unique wishers, return rate, free → paid conversion, pack
+revenue, on-chain stones; seeded stones are excluded and never labelled), the money flow, token allocation and
+utility, sale terms read from the sale contract, verifiable guarantees, contract addresses with explorer links,
+the plan and the risks. Korean with `?lang=ko`. The X launch thread (en/ko) and posting checklist live in
+`docs/X_THREAD.md`.
+
 **Investor page `/invest`**: connect a wallet to see tower height, lifetime distributions, total staked and your
 share; buy in the public sale (with the sale's progress, claim or refund after finalization); stake and
 unstake CAIRN; see claimable revenue per stablecoin and claim it all at once. Korean with `/invest?lang=ko`.
