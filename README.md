@@ -283,6 +283,11 @@ enough to see the whole tower from the sky; double-click on the sky resets. The 
 presets: auto, close, wide, from below, sky, from above. `?view=<name>` opens in one of them, which is how a stream
 background picks its angle (`?ambient=1&view=low`).
 
+**Fly up.** The 🎈 button opens a ladder of the six bands; choosing one above the tower's real height rides the
+world up to it (sky, fog, clouds, moon and sun, the waters above) while the HUD keeps the real height and a
+"Preview" line brings you back down. `?fly=<band index>` opens there, e.g. `?ambient=1&fly=2` for a stream
+background above the clouds. The garden view and the ceremony are unaffected.
+
 **Blessing marks and the day's top wishes.** A stone with `BLESS_MARK` (5) or more blessings carries a small "✦ N"
 light on the tower, always visible, so the most blessed wishes can be found without tapping. The Recent wishes panel
 pins the three most blessed wishes of the day (of the week while the day has none), updated live on every blessing.
